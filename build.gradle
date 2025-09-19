@@ -1,39 +1,58 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.5.6'
-    id 'io.spring.dependency-management' version '1.1.7'
+    id 'war'
+    id 'org.springframework.boot' version '2.7.18'
+    id 'io.spring.dependency-management' version '1.1.6'
 }
 
 group = 'com.multi'
-version = '0.0.1-SNAPSHOT'
-description = 'kakaoMap-miniPJT'
+version = '1.0.0'
+java { toolchain { languageVersion = JavaLanguageVersion.of(17) } }
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
-    }
-}
-
-configurations {
-    compileOnly {
-        extendsFrom annotationProcessor
-    }
-}
-
-repositories {
-    mavenCentral()
-}
+repositories { mavenCentral() }
 
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
-    implementation 'org.springframework.boot:spring-boot-starter-web'
-    compileOnly 'org.projectlombok:lombok'
+    // Web (내장 톰캣 제외)
+    implementation('org.springframework.boot:spring-boot-starter-web') {
+        exclude group: 'org.springframework.boot', module: 'spring-boot-starter-tomcat'
+    }
+
+    // 외부 톰캣에서 제공되므로 providedRuntime
+    providedRuntime 'org.springframework.boot:spring-boot-starter-tomcat'
+
+    // MyBatis (Boot 2.x 호환)
+    implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:2.3.1'
+
+    // JSP & JSTL (javax 세계) — 외부 톰캣이면 보통 jasper 불필요
+    // implementation 'org.apache.tomcat.embed:tomcat-embed-jasper' // ← 임베디드 톰캣 JAR 실행시에만 사용
+    implementation 'javax.servlet:jstl:1.2'
+
+    // Servlet API는 컴파일 전용 (외부 톰캣이 제공)
+    compileOnly 'javax.servlet:javax.servlet-api:4.0.1'
+
+    // DB Driver (하나만 사용하세요)
+    //runtimeOnly 'mysql:mysql-connector-java' // 또는 runtimeOnly 'com.mysql:mysql-connector-j'
+    runtimeOnly  'com.mysql:mysql-connector-j'
+    // Devtools (개발 전용, 패키징 시 자동 제외)
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+
+    // Test
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter-test:2.3.1'
+
+    implementation 'org.apache.tomcat.embed:tomcat-embed-jasper' // JSP를 위해 필수
+    implementation 'javax.servlet:jstl:1.2' // JSTL 태그를 위해 필수
 }
 
-tasks.named('test') {
-    useJUnitPlatform()
-}
+tasks.withType(Test) { useJUnitPlatform() }
+
+// WAR만 산출
+bootJar { enabled = false }
+bootWar { enabled = true }
+
