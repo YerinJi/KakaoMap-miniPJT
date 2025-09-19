@@ -12,42 +12,17 @@ java { toolchain { languageVersion = JavaLanguageVersion.of(17) } }
 repositories { mavenCentral() }
 
 dependencies {
-    // Web (내장 톰캣 제외)
-    implementation('org.springframework.boot:spring-boot-starter-web') {
-        exclude group: 'org.springframework.boot', module: 'spring-boot-starter-tomcat'
-    }
+        implementation 'org.springframework.boot:spring-boot-starter-web'        // MVC + 내장 Tomcat 9
+        implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'  // Thymeleaf
+        implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:2.2.2'
+        implementation 'mysql:mysql-connector-java:8.0.33'
 
-    // 외부 톰캣에서 제공되므로 providedRuntime
-    providedRuntime 'org.springframework.boot:spring-boot-starter-tomcat'
+        compileOnly 'org.projectlombok:lombok:1.18.32'
+        annotationProcessor 'org.projectlombok:lombok:1.18.32'
 
-    // MyBatis (Boot 2.x 호환)
-    implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:2.3.1'
+        developmentOnly 'org.springframework.boot:spring-boot-devtools'
+        testImplementation 'org.springframework.boot:spring-boot-starter-test'
 
-    // JSP & JSTL (javax 세계) — 외부 톰캣이면 보통 jasper 불필요
-    // implementation 'org.apache.tomcat.embed:tomcat-embed-jasper' // ← 임베디드 톰캣 JAR 실행시에만 사용
-    implementation 'javax.servlet:jstl:1.2'
-
-    // Servlet API는 컴파일 전용 (외부 톰캣이 제공)
-    compileOnly 'javax.servlet:javax.servlet-api:4.0.1'
-
-    // DB Driver (하나만 사용하세요)
-    //runtimeOnly 'mysql:mysql-connector-java' // 또는 runtimeOnly 'com.mysql:mysql-connector-j'
-    runtimeOnly  'com.mysql:mysql-connector-j'
-    // Devtools (개발 전용, 패키징 시 자동 제외)
-    developmentOnly 'org.springframework.boot:spring-boot-devtools'
-
-    // Lombok
-    compileOnly 'org.projectlombok:lombok'
-    annotationProcessor 'org.projectlombok:lombok'
-    testCompileOnly 'org.projectlombok:lombok'
-    testAnnotationProcessor 'org.projectlombok:lombok'
-
-    // Test
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter-test:2.3.1'
-
-    implementation 'org.apache.tomcat.embed:tomcat-embed-jasper' // JSP를 위해 필수
-    implementation 'javax.servlet:jstl:1.2' // JSTL 태그를 위해 필수
 }
 
 tasks.withType(Test) { useJUnitPlatform() }
