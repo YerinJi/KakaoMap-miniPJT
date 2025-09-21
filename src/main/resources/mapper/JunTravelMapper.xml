@@ -2,9 +2,9 @@
 <!DOCTYPE mapper
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.multi.kakaomapminipjt.mapper.JunMapper">
+<mapper namespace="com.multi.kakaomapminipjt.mapper.TravelMapper">
 <!--    목록    -->
-    <select id="list" parameterType="map" resultType="com.multi.kakaomapminipjt.dto.JunTravel">
+    <select id="list" parameterType="map" resultType="com.multi.kakaomapminipjt.dto.Travel">
         select title, address from travel
          <where>
              <if test="keyword != null and keyword != ''">

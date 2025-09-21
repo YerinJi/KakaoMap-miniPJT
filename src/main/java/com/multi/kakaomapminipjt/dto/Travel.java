@@ -3,7 +3,7 @@ package com.multi.kakaomapminipjt.dto;
 import lombok.Data;
 
 @Data
-public class JunTravel {
+public class Travel {
     private int no;
     private String district;
     private String title;
