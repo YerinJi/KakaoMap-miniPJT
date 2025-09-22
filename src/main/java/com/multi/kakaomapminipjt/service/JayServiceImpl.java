@@ -1,6 +1,6 @@
 package com.multi.kakaomapminipjt.service;
 
-import com.multi.kakaomapminipjt.dto.JayTravel;
+import com.multi.kakaomapminipjt.dto.Travel;
 import com.multi.kakaomapminipjt.mapper.JayMapper;
 
 import java.util.List;
@@ -13,12 +13,12 @@ public class JayServiceImpl implements JayService {
     }
 
     @Override
-    public List<JayTravel> getJayTravel() {
+    public List<Travel> getJayTravel() {
         return jayMapper.getJayTravel();
     }
 
     @Override
-    public List<JayTravel> getJayTravelByKeyword() {
-        return List.of();
+    public List<Travel> getJayTravelByKeyword() {
+        return jayMapper.jaySearchByKeyword();
     }
 }
