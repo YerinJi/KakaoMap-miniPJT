@@ -18,10 +18,10 @@ import java.util.List;
 import java.net.URL;
 
 @Controller
-public class YerinController {
+public class MapJYRController {
     private final YerinService yerinService;
 
-    public YerinController(YerinService yerinService) {
+    public MapJYRController(YerinService yerinService) {
         this.yerinService = yerinService;
     }
 
