@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+        <mapper namespace="com.multi.kakaomapminipjt.mapper.YukMapper">
+
+        <select id="getTotalCount" resultType="int">
+        SELECT count(*) FROM travel_db
+        </select>
+
+        <select id="getTravelList" resultType="com.multi.kakaomapminipjt.dto.YukTravel">
+        SELECT no, district, title, description, address, phone
+        FROM travel_db
+        ORDER BY no
+        LIMIT #{offset}, #{size}
+        </select>
+
+        <select id="getTravelByNo" resultType="com.multi.kakaomapminipjt.dto.YukTravel">
+        SELECT no, district, title, description, address, phone
+        FROM travel_db
+        WHERE no = #{no}
+        </select>
+
+        <select id="getSearchCount" resultType="int">
+        SELECT count(*) FROM travel_db
+        <where>
+        <if test="searchKeyword != null and searchKeyword != ''">
+        (title LIKE CONCAT('%', #{searchKeyword}, '%') OR district LIKE CONCAT('%', #{searchKeyword}, '%'))
+        </if>
+        </where>
+        </select>
+
+        <select id="searchTravelList" resultType="com.multi.kakaomapminipjt.dto.YukTravel">
+        SELECT no, district, title, description, address, phone
+        FROM travel_db
+        <where>
+        <if test="searchKeyword != null and searchKeyword != ''">
+        (title LIKE CONCAT('%', #{searchKeyword}, '%') OR district LIKE CONCAT('%', #{searchKeyword}, '%'))
+        </if>
+        </where>
+        ORDER BY no
+        LIMIT #{offset}, #{size}
+        </select>
+        </mapper>
