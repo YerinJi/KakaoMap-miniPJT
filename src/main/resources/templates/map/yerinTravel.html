@@ -10,6 +10,7 @@
         body { margin: 0; font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
         header { padding: 14px 18px; border-bottom: 1px solid #eee; display:flex; gap:12px; align-items:center; }
         header h1 { font-size: 18px; margin: 0 8px 0 0; color: black; }
+        header h1 a { color: black; text-decoration: none; }
         header .hint { color:#666; font-size: 13px; }
         .container { display: grid; grid-template-columns: 380px 1fr; height: calc(100vh - 60px); }
         .left { border-right: 1px solid #eee; padding: 12px; overflow: auto; }
@@ -27,55 +28,16 @@
         .pill { display:inline-block; border:1px solid #eee; padding:4px 8px; border-radius:999px; font-size:12px; color:#666; }
         .map { position: relative; }
         #map { width: 100%; height: 100%; min-height: 420px; }
-        .floating { position:absolute; top:10px; right:10px; background:white; border:1px solid #eee; border-radius:12px; padding:10px; display:flex; gap:8px; }
-        .legend { position:absolute; bottom:10px; left:10px; background:white; border:1px solid #eee; border-radius:12px; padding:8px 10px; color:#555; font-size: 12px; }
-        .muted { color:#777; font-size:12px; }
-        .hr { height:1px; background:#f1f1f1; margin:8px 0; }
+         .muted { color:#777; font-size:12px; }
         .small { font-size: 12px; }
-        .footer { padding:8px 12px; border-top:1px solid #eee; color:#666; font-size: 12px; }
 
         /* 탭 관련 스타일 추가 */
         .tabs { display:flex; justify-content: space-around; border-bottom: 1px solid #ddd; margin-top: 12px; }
         .tabs button { flex:1; border:none; background:none; cursor:pointer; padding: 10px 0; font-size:14px; color:#888; font-weight:500; border-bottom:2px solid transparent; transition: border-bottom 0.2s, color 0.2s; }
         .tabs button.active { color:#333; border-bottom:2px solid #555; font-weight:600; }
         #tabContent { padding-top: 12px; }
-        .container {
-            display: grid;
-            grid-template-columns: 380px 1fr 280px; /* 세 번째 열(이미지) 추가 */
-            height: calc(100vh - 60px);
-        }
-        .right {
-            border-left: 1px solid #eee;
-            padding: 12px;
-            overflow-y: auto;
-        }
-        .right h2 {
-            margin: 6px 0 10px;
-            font-size: 16px;
-        }
-        .image-grid {
-            display: grid;
-            gap: 10px;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-        }
-        .image-grid img {
-            width: 100%;
-            height: auto;
-            border-radius: 8px;
-            border: 1px solid #eee;
-            object-fit: cover;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        }
-        .no-images {
-            display: none; /* JS로 제어 */
-            text-align: center;
-            color: #888;
-            font-size: 14px;
-        }
-        a{
-            text-decoration: none;
-            color: black;
-        }
+
+
     </style>
 </head>
 <body>
@@ -121,14 +83,6 @@
     <main class="map">
         <div id="map"></div>
     </main>
-    <aside class="right">
-        <h2>관련 이미지</h2>
-        <div id="imageResults" class="image-grid">
-            <div class="card no-images" style="display:none">
-                <p>표시할 이미지가 없습니다.</p>
-            </div>
-        </div>
-    </aside>
 </div>
 <script th:inline="javascript">
     const initialItems = null;
@@ -163,8 +117,28 @@
         kakao.maps.event.addListener(map, 'center_changed', setCenterLabel);
 
 
+        // 비동기적으로 이미지를 검색하고 HTML을 반환하는 함수
+        async function fetchImageHtml(query) {
+            try {
+                const res = await fetch(`/yerinTravel/searchImages?keyword=${encodeURIComponent(query)}`);
+                if (!res.ok) throw new Error('Image server error ' + res.status);
+                const data = await res.json();
+
+                if (data && data.length > 0) {
+                    const secureUrl = data[0].replace('http://', 'https://');
+                    return `<img src="${secureUrl}" style="width:100%; height:100px; object-fit: cover;">`;
+                } else {
+                    return `<div style="text-align:center; padding:10px;">이미지 없음</div>`;
+                }
+            } catch (error) {
+                console.error('이미지 검색 실패:', error);
+                return `<div style="text-align:center; padding:10px;">이미지 로드 실패</div>`;
+            }
+        }
+
+        // 검색 결과를 받아 이미지 섹션에 렌더링하는 함수
         function searchImages(query) {
-            $imageResults.innerHTML = ''; // 이전 이미지 제거
+            $imageResults.innerHTML = '';
 
             fetch(`/yerinTravel/searchImages?keyword=${encodeURIComponent(query)}`)
                 .then(response => {
@@ -175,7 +149,6 @@
                     if (data && data.length > 0) {
                         data.forEach(url => {
                             const img = document.createElement('img');
-                            // 이 부분이 http://를 https://로 교체하여 혼합 콘텐츠 문제를 해결합니다.
                             const secureUrl = url.replace('http://', 'https://');
                             img.src = secureUrl;
                             img.alt = query + ' 이미지';
@@ -214,7 +187,7 @@
         function clearNearbyOnly() {
             try {
                 try { clusterer.clear(); } catch (e) {}
-                if (searchMarkers.length) clusterer.addMarkers(searchMarkers);
+                if (searchMarkers.length) clusterer.addMarkers(searchMarkers, true);
             } catch (e) { console.warn('clearNearbyOnly clusterer 처리 중 오류:', e); }
             nearbyMarkers.forEach(m => m.setMap(null));
             nearbyMarkers = [];
@@ -233,7 +206,6 @@
                     <p class="small muted">전화: ${p.phone || '-'}</p>
                 `;
                 card.onclick = () => {
-                    // 1. 지도 이동 로직 (기존 코드)
                     if (p.y && p.x) {
                         const coords = new kakao.maps.LatLng(parseFloat(p.y), parseFloat(p.x));
                         map.panTo(coords);
@@ -250,7 +222,6 @@
                     } else {
                         alert('주소 정보가 없습니다.');
                     }
-
                     const fullTitle = card.getAttribute('data-title');
                     if (fullTitle) {
                         const words = fullTitle.split(' ');
@@ -279,7 +250,6 @@
                 card.onclick = () => {
                     const pos = new kakao.maps.LatLng(p.y, p.x);
                     map.panTo(pos);
-
                     const searchKeyword = p.place_name;
                     if (searchKeyword) {
                         searchImages(searchKeyword);
@@ -289,38 +259,47 @@
             });
         }
 
-        function addMarkers(locations, colorEmoji) {
+        // 마커에 이미지 인포윈도우를 추가하도록 수정된 함수
+        async function addMarkers(locations, isBlue) {
             const bounds = new kakao.maps.LatLngBounds();
             const newMarkers = [];
-            const isBlue = colorEmoji === '🔵';
 
-            locations.forEach((p, i) => {
+            for (const p of locations) {
                 const lat = parseFloat(p.y);
                 const lng = parseFloat(p.x);
-                if (Number.isNaN(lat) || Number.isNaN(lng)) return;
+                if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
                 const pos = new kakao.maps.LatLng(lat, lng);
                 bounds.extend(pos);
 
+                const markerColor = isBlue ? 'blue' : 'green';
                 const markerImage = new kakao.maps.MarkerImage(
-                    `https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_number_${isBlue ? 'blue' : 'green'}.png`,
+                    `https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_number_${markerColor}.png`,
                     new kakao.maps.Size(36, 37),
-                    { spriteSize: new kakao.maps.Size(36, 691), spriteOrigin: new kakao.maps.Point(0, (i * 46) + 10) }
+                    { spriteSize: new kakao.maps.Size(36, 691), spriteOrigin: new kakao.maps.Point(0, (locations.indexOf(p) * 46) + 10) }
                 );
 
                 const marker = new kakao.maps.Marker({ position: pos, image: markerImage });
                 newMarkers.push(marker);
 
-                kakao.maps.event.addListener(marker, 'click', function() {
+                // 마커 클릭 시 인포윈도우에 이미지 표시
+                kakao.maps.event.addListener(marker, 'click', async function() {
+                    const title = p.title || p.place_name || '';
+                    const address = p.address || p.road_address_name || p.address_name || '';
+
+                    // 이미지 검색 후 인포윈도우 콘텐츠 생성
+                    const imageHtml = await fetchImageHtml(title);
+
                     const html = `
-                    <div style="padding:8px 10px">
-                        <div style="font-weight:600;margin-bottom:4px">${p.title || p.place_name || ''}</div>
-                        <div style="font-size:12px;color:#555">${p.address || p.road_address_name || p.address_name || ''}</div>
-                        <div style="font-size:12px;color:#666">전화: ${p.phone || '-'}</div>
-                    </div>`;
+                <div style="padding:10px; min-width: 250px; font-family: 'Pretendard', sans-serif; line-height: 1.4;">
+                    ${imageHtml}
+                    <div style="font-weight:600; margin-top:10px; font-size:16px;">${title}</div>
+                    <div style="font-size:13px; color:#555; margin-top:4px;">${address}</div>
+                </div>
+            `;
                     infowindow.setContent(html);
                     infowindow.open(map, marker);
                 });
-            });
+            }
 
             if (newMarkers.length > 0) {
                 clusterer.addMarkers(newMarkers);
@@ -542,7 +521,7 @@
                     });
                     markers.push(marker);
                     kakao.maps.event.addListener(marker, 'click', function() {
-                        const html = `<div style="padding:8px 10px"><div style="font-weight:600;margin-bottom:4px">[관광명소] ${p.place_name}</div>
+                        const html = `<div style="padding:8px 10px"><div style="font-weight:600;margin-bottom:4px">${p.place_name}</div>
                                         <div style="font-size:12px;color:#555">${p.road_address_name || p.address_name || ''}</div>
                                         <a href="${p.place_url}" target="_blank" style="font-size:12px">상세보기</a></div>`;
                         infowindow.setContent(html);
