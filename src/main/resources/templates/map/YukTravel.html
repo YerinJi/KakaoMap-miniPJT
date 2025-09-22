@@ -1,76 +1,423 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8" />
+    <title>Kakao Map — 100대 관광지 서비스</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>100대 관광지 목록</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=0655c4042301822abc2935eb24a431c8&autoload=false&libraries=services,clusterer"></script>
+
     <style>
-        .page-item.active .page-link {
-            background-color: #007bff;
-            border-color: #007bff;
+        :root{
+            --bg:#f7f7fb; --card:#fff; --border:#ececf2; --text:#1f2328; --muted:#6b7280; --accent:#111827;
+            --ring:rgba(17,24,39,.08); --shadow:0 6px 20px rgba(0,0,0,.06);
+            --blue:#2563eb; --green:#059669; --purple: #8b5cf6;
+        }
+        *{box-sizing:border-box}
+        html,body{height:100%; margin:0; font-family: ui-sans-serif,system-ui, -apple-system, Segoe UI, Roboto, 'Noto Sans KR', Arial}
+        body{background:var(--bg); color:var(--text)}
+        header{display:flex; align-items:center; gap:12px; padding:14px 18px; background:var(--card); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:10}
+        header h1{font-size:18px; margin:0}
+        header .right{margin-left:auto; display:flex; gap:8px}
+        .btn{
+            border:1px solid var(--border); background:var(--card); padding:8px 12px; border-radius:10px; cursor:pointer;
+            box-shadow: var(--shadow);
+        }
+        .btn.primary{border-color:var(--accent); background:#fff}
+        .btn.small{padding:6px 10px; font-size:13px}
+        .btn:active{transform:translateY(1px)}
+
+        .wrap{display:grid; grid-template-columns:360px 1fr; height:calc(100% - 60px)}
+        aside{background:var(--card); border-right:1px solid var(--border); padding:12px; overflow-y:auto}
+        .sec-title{font-size:15px; font-weight:700; margin:8px 0 10px}
+        .row{display:flex; gap:8px; align-items:center}
+        input[type="text"]{
+            flex:1; padding:10px 12px; border:1px solid var(--border); border-radius:12px; outline:none;
+            box-shadow: inset 0 0 0 1px transparent; transition:.15s;
+        }
+        input[type="text"]:focus{box-shadow: inset 0 0 0 1px var(--ring), 0 0 0 3px var(--ring)}
+        .muted{color:var(--muted); font-size:12px}
+        .hr{height:1px; background:var(--border); margin:12px 0}
+
+        .cards{display:grid; gap:8px}
+        .card{
+            background:var(--card); border:1px solid var(--border); border-radius:14px; padding:10px; box-shadow:var(--shadow);
+            transition:.15s; cursor:pointer;
+        }
+        .card.active{border-color:var(--purple); background:#f0e8ff}
+        .card:hover{transform: translateY(-1px)}
+        .card h3{margin:0 0 6px; font-size:15px}
+        .card p{margin:2px 0; font-size:13px; color:var(--muted)}
+
+        main{position:relative}
+        #map{width:100%; height:100%}
+        .floating{position:absolute; top:12px; right:12px; display:flex; gap:8px}
+        .legend{
+            position:absolute; left:12px; bottom:12px; font-size:12px; color:var(--muted);
+            background:var(--card); border:1px solid var(--border); border-radius:12px; padding:8px 10px; box-shadow:var(--shadow)
+        }
+        .pill{display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border:1px solid var(--border); border-radius:999px; font-size:12px; color:var(--muted)}
+        .pill .dot{width:10px; height:10px; border-radius:999px}
+        .dot.blue{background:var(--blue)}
+        .dot.green{background:var(--green)}
+        .dot.purple{background:var(--purple)}
+        .center-pill{margin-left:auto}
+
+        /* 페이지네이션 스타일 */
+        .pagination-container {
+            margin-top: 15px;
+            display: flex;
+            justify-content: center;
+        }
+        .pagination a {
+            padding: 5px 10px;
+            margin: 0 2px;
+            text-decoration: none;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+        }
+        .pagination a.active {
+            background-color: var(--purple);
+            color: white;
+            border-color: var(--purple);
+        }
+        .pagination a:hover:not(.active) {
+            background-color: #f0f0f0;
+        }
+        /* 모바일 */
+        @media (max-width: 960px){
+            .wrap{grid-template-columns:1fr}
+            aside{display:none}
+            .wrap.show-left aside{display:block; position:absolute; z-index:12; width:min(94vw, 360px); height:80vh; border-radius:16px; box-shadow:var(--shadow)}
+            .wrap.show-left main::after{content:""; position:absolute; inset:0; background:rgba(0,0,0,.06)}
         }
     </style>
 </head>
 <body>
-<div class="container mt-5">
-    <h1 class="mb-4">100대 관광지 목록</h1>
+<header>
+    <h1>관광지 서비스</h1>
 
-    <form class="d-flex mb-4" th:action="@{/YukTravel}" method="get">
-        <input class="form-control me-2" type="search" placeholder="제목 또는 지역으로 검색" aria-label="Search" name="search" th:value="${searchKeyword}">
-        <button class="btn btn-outline-success" type="submit">검색</button>
-        <a th:href="@{/YukTravel}" class="btn btn-outline-secondary ms-2">전체 목록</a>
-    </form>
+    <div class="right">
+        <button id="togglePanel" class="btn small">목록/검색 패널</button>
+    </div>
+</header>
 
-    <p th:if="${searchKeyword != null and searchKeyword != ''}">
-        '<strong><span th:text="${searchKeyword}"></span></strong>' (으)로 검색된 결과: <strong><span th:text="${response.pagination.total}"></span></strong>건
-    </p>
+<div class="wrap" id="wrap">
+    <aside>
+        <div class="sec-title">1. 100대 관광지 목록 (보라색 마커)</div>
+        <form th:action="@{/YukTravel}" method="get" class="row">
+            <input name="search" th:value="${searchKeyword}" placeholder="DB에서 관광지 검색 (제목/지역)" />
+            <button type="submit" class="btn primary">검색</button>
+        </form>
+        <div class="muted" style="margin-top:6px" th:if="${response.pagination.total > 0}">
+            DB 검색 결과: <strong th:text="${response.pagination.total}"></strong>건
+        </div>
+        <div class="muted" style="margin-top:6px" th:if="${response.pagination.total == 0}">
+            DB 검색 결과가 없습니다.
+        </div>
 
-    <table class="table table-hover">
-        <thead>
-        <tr>
-            <th>순번</th>
-            <th>지역</th>
-            <th>제목</th>
-            <th>주소</th>
-        </tr>
-        </thead>
-        <tbody>
-        <tr th:each="travel : ${response.items}">
-            <td th:text="${travel.no}">1</td>
-            <td th:text="${travel.district}">서울</td>
-            <td>
-                <a th:href="@{/YukTravelDetail(no=${travel.no})}" th:text="${travel.title}">N서울타워</a>
-            </td>
-            <td th:text="${travel.address}">서울시 용산구 남산공원길</td>
-        </tr>
-        <tr th:if="${response.items.empty}">
-            <td colspan="4" class="text-center">조회된 관광지 정보가 없습니다.</td>
-        </tr>
-        </tbody>
-    </table>
+        <div class="hr"></div>
+        <div class="cards" id="dbList">
+            <div class="card db-card" th:each="travel, stat : ${response.items}"
+                 th:data-index="${stat.index}"
+                 th:data-address="${travel.address}"
+                 th:data-title="${travel.title}"
+                 th:data-no="${travel.no}"
+            >
+                <h3 th:text="|${response.pagination.offset + stat.count}. ${travel.title}|"></h3>
+                <p th:text="${travel.district}"></p>
+                <p th:text="${travel.address}"></p>
+                <p class="muted"><a th:href="@{/YukTravelDetail(no=${travel.no})}" style="color:var(--purple); text-decoration:none;">상세보기 (#<span th:text="${travel.no}"></span>)</a></p>
+            </div>
 
-    <nav aria-label="Page navigation" th:object="${response.pagination}">
-        <ul class="pagination justify-content-center">
-            <li class="page-item" th:classappend="*{!hasPrev} ? 'disabled'">
-                <a class="page-link" th:href="@{/YukTravel(page=*{prevPage}, search=${searchKeyword})}" aria-label="Previous Block">
-                    <span aria-hidden="true">&laquo;</span>
-                </a>
-            </li>
+            <div th:if="${response.items.isEmpty()}">
+                <div class="card">
+                    <p>조회된 관광지 정보가 없습니다.</p>
+                </div>
+            </div>
+        </div>
 
-            <li class="page-item" th:each="p : ${#numbers.sequence(response.pagination.startPage, response.pagination.endPage)}"
-                th:classappend="${p == response.pagination.page} ? 'active'">
-                <a class="page-link" th:href="@{/YukTravel(page=${p}, search=${searchKeyword})}" th:text="${p}">1</a>
-            </li>
+        <div class="pagination-container" th:object="${response.pagination}">
+            <nav class="pagination" th:if="*{totalPages > 1}">
+                <a th:if="*{hasPrev}" th:href="@{/YukTravel(page=*{prevPage}, search=${searchKeyword})}" aria-label="Previous Block">&laquo;</a>
 
-            <li class="page-item" th:classappend="*{!hasNext} ? 'disabled'">
-                <a class="page-link" th:href="@{/YukTravel(page=*{nextPage}, search=${searchKeyword})}" aria-label="Next Block">
-                    <span aria-hidden="true">&raquo;</span>
-                </a>
-            </li>
-        </ul>
-    </nav>
+                <a th:each="p : ${#numbers.sequence(response.pagination.startPage, response.pagination.endPage)}"
+                   th:href="@{/YukTravel(page=${p}, search=${searchKeyword})}"
+                   th:text="${p}"
+                   th:classappend="${p == response.pagination.page} ? 'active'"
+                >1</a>
+
+                <a th:if="*{hasNext}" th:href="@{/YukTravel(page=*{nextPage}, search=${searchKeyword})}" aria-label="Next Block">&raquo;</a>
+            </nav>
+        </div>
+
+
+        <div class="hr"></div>
+        <div class="sec-title">2. 키워드 검색 (파란 마커)</div>
+        <div class="row">
+            <input id="kw" placeholder="예) 경복궁, 광화문 카페" />
+            <button class="btn primary" id="btnSearch">검색</button>
+        </div>
+        <div class="muted" style="margin-top:6px">카카오 API로 장소를 찾고, 파란 마커로 표시</div>
+
+        <div class="hr"></div>
+        <div class="cards" id="searchList"></div>
+
+        <div class="hr"></div>
+        <div class="sec-title">3. 주변 관광명소 (초록 마커)</div>
+        <div class="row" style="justify-content:space-between;">
+            <button class="btn" id="btnNearby">현재 중심에서 찾기</button>
+            <span class="pill center-pill" id="centerLabel">center: - , -</span>
+        </div>
+        <div class="muted" style="margin-top:6px">카카오 API의 관광명소 카테고리, 초록 마커로 표시</div>
+        <div class="cards" id="nearList" style="margin-top:8px"></div>
+
+
+    </aside>
+
+    <main>
+        <div id="map"></div>
+        <div class="floating">
+            <button class="btn small" id="btnSeoul">서울</button>
+            <button class="btn small" id="btnBusan">부산</button>
+            <button class="btn small" id="btnJeju">제주</button>
+        </div>
+        <div class="legend">
+            <div style="display:flex; gap:8px; align-items:center;">
+                <span class="pill"><span class="dot purple"></span>100대 관광지 (DB)</span>
+                <span class="pill"><span class="dot blue"></span>키워드 검색</span>
+                <span class="pill"><span class="dot green"></span>카테고리 검색</span>
+            </div>
+        </div>
+    </main>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script th:inline="javascript">
+    /* <![CDATA[ */
+    const dbTravels = /*[[${response.items}]]*/ [];
+    /* ]]> */
+
+    kakao.maps.load(function () {
+        const map = new kakao.maps.Map(document.getElementById('map'), {
+            center: new kakao.maps.LatLng(37.5665, 126.9780),
+            level: 7
+        });
+        const places = new kakao.maps.services.Places();
+        const geocoder = new kakao.maps.services.Geocoder();
+        const info = new kakao.maps.InfoWindow({ zIndex: 2 });
+
+        const clusterDB = new kakao.maps.MarkerClusterer({
+            map, averageCenter: true, minLevel: 7,
+            styles: [{
+                url: 'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_number_red.png',
+                width: '30px', height: '30px', lineHeight: '30px'
+            }]
+        });
+        const clusterSearch = new kakao.maps.MarkerClusterer({
+            map, averageCenter: true, minLevel: 7,
+            styles: [{ url: 'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_number_blue.png', width: '27px', height: '27px', lineHeight: '27px' }]
+        });
+
+        let dbMarkers = [];
+        let searchMarkers = [];
+        let nearMarkers = [];
+
+        const $kw = document.getElementById('kw');
+        const $btnSearch = document.getElementById('btnSearch');
+        const $btnNearby = document.getElementById('btnNearby');
+        const $searchList = document.getElementById('searchList');
+        const $nearList = document.getElementById('nearList');
+        const $centerLabel = document.getElementById('centerLabel');
+        const $wrap = document.getElementById('wrap');
+        const $dbCards = document.querySelectorAll('.db-card');
+
+        // --- 유틸리티 함수 ---
+        document.getElementById('togglePanel').onclick = () => $wrap.classList.toggle('show-left');
+        function setCenterLabel(){ const c = map.getCenter(); $centerLabel.textContent = `center: ${c.getLat().toFixed(5)}, ${c.getLng().toFixed(5)}`; }
+        setCenterLabel();
+        kakao.maps.event.addListener(map, 'center_changed', setCenterLabel);
+        function clearMarkers(markers, cluster) {
+            markers.forEach(m => m.setMap(null));
+            markers.length = 0;
+            if(cluster) cluster.clear();
+            info.close();
+        }
+        function clearSearch(){ clearMarkers(searchMarkers, clusterSearch); $searchList.innerHTML = ''; }
+        function clearNearby(){ clearMarkers(nearMarkers, null); $nearList.innerHTML = ''; }
+
+        function createCard(item, index, listType, isDb = false){
+            const el = document.createElement('div');
+            el.className = 'card';
+            el.innerHTML = `
+              <h3>${index + 1}. ${item.title || item.place_name}</h3>
+              <p>${item.address || item.road_address_name || item.address_name || ''}</p>
+              ${item.phone ? `<p>전화: ${item.phone}</p>` : ''}
+              ${isDb ? `<p class="muted">DB 번호: ${item.no} / 상세보기</p>` : `<p class="muted">카카오 상세보기</p>`}
+            `;
+            if (!isDb) {
+                el.onclick = () => {
+                    const latlng = new kakao.maps.LatLng(item.y, item.x);
+                    map.panTo(latlng);
+                    const targetMarker = (listType === 'search' ? searchMarkers : nearMarkers).find(m => m.getPosition().equals(latlng));
+                    if (targetMarker) { kakao.maps.event.trigger(targetMarker, 'click'); }
+                };
+            }
+            return el;
+        }
+        function getDbMarkerImage() {
+            return new kakao.maps.MarkerImage(
+                'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_red.png',
+                new kakao.maps.Size(27, 35)
+            );
+        }
+
+        // --- DB 목록 마커 표시 (100대 관광지 표시하기) ---
+        function displayDbMarkers() {
+            if (dbTravels.length === 0) return;
+
+            const bounds = new kakao.maps.LatLngBounds();
+            const markersToCluster = [];
+            const geocodingPromises = [];
+
+            $dbCards.forEach(($card) => {
+                const address = $card.dataset.address;
+                const title = $card.dataset.title;
+                const no = $card.dataset.no;
+                const url = `/YukTravelDetail?no=${no}`;
+
+                const promise = new Promise((resolve) => {
+                    geocoder.addressSearch(address, function(result, status) {
+                        if (status === kakao.maps.services.Status.OK) {
+                            const pos = new kakao.maps.LatLng(result[0].y, result[0].x);
+                            bounds.extend(pos);
+
+                            const m = new kakao.maps.Marker({ position: pos, image: getDbMarkerImage() });
+                            dbMarkers.push(m);
+                            markersToCluster.push(m);
+
+                            kakao.maps.event.addListener(m, 'click', function() {
+                                info.setContent(`
+                                    <div style="padding:8px 10px; min-width:200px">
+                                      <div style="font-weight:700; color:var(--purple);">${title}</div>
+                                      <div style="font-size:12px; color:#666">${address}</div>
+                                      <a href="${url}" style="font-size:12px; color:var(--purple);">DB 상세 페이지 이동</a>
+                                    </div>
+                                `);
+                                info.open(map, m);
+                                map.panTo(pos);
+
+                                document.querySelectorAll('.db-card').forEach(c => c.classList.remove('active'));
+                                $card.classList.add('active');
+                            });
+
+                            $card.onclick = (e) => {
+                                if (e.target.tagName.toLowerCase() === 'a' || e.target.closest('a')) {
+                                    return;
+                                }
+                                map.panTo(pos);
+                                kakao.maps.event.trigger(m, 'click');
+                            };
+                        } else {
+                            console.warn(`주소 검색 실패: ${title} (${address})`);
+                        }
+                        resolve();
+                    });
+                });
+                geocodingPromises.push(promise);
+            });
+
+            Promise.all(geocodingPromises).then(() => {
+                clusterDB.addMarkers(markersToCluster);
+                if (!bounds.isEmpty()) { map.setBounds(bounds); }
+            });
+        }
+
+        // --- 키워드 검색 ---
+        function searchKeyword(){
+            const kw = ($kw.value || '').trim();
+            if(!kw) return alert('검색어를 입력하세요.');
+            clearSearch();
+
+            places.keywordSearch(kw, (data, status) => {
+                if(status !== kakao.maps.services.Status.OK) return alert('키워드 검색 결과가 없습니다.');
+                const bounds = new kakao.maps.LatLngBounds();
+
+                data.forEach((p, i) => {
+                    const pos = new kakao.maps.LatLng(p.y, p.x);
+                    bounds.extend(pos);
+
+                    const markerImage = new kakao.maps.MarkerImage(
+                        'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_number_blue.png',
+                        new kakao.maps.Size(36, 37),
+                        { spriteSize: new kakao.maps.Size(36, 700), spriteOrigin: new kakao.maps.Point(0, (i * 46) + 10) }
+                    );
+
+                    const m = new kakao.maps.Marker({ position: pos, image: markerImage });
+                    searchMarkers.push(m);
+
+                    kakao.maps.event.addListener(m, 'click', () => {
+                        info.setContent(`
+                            <div style="padding:8px 10px; min-width:180px">
+                              <div style="font-weight:600">${p.place_name}</div>
+                              <div style="font-size:12px; color:#666">${p.road_address_name || p.address_name || ''}</div>
+                              <a href="${p.place_url}" target="_blank" style="font-size:12px">카카오 상세보기</a>
+                            </div>
+                        `);
+                        info.open(map, m);
+                    });
+                    $searchList.appendChild(createCard(p, i, 'search'));
+                });
+                clusterSearch.addMarkers(searchMarkers);
+                map.setBounds(bounds);
+            }, {useMapBounds:false});
+        }
+
+        // --- 카테고리 검색 (주변 관광지 정보 표시) ---
+        function searchNearby(){
+            clearNearby();
+            const center = map.getCenter();
+            const opt = { location: center, radius: 5000, size: 15 };
+
+            places.categorySearch('AT4', (data, status) => {
+                if(status !== kakao.maps.services.Status.OK) return alert('주변 관광명소(AT4) 검색 결과가 없습니다.');
+
+                data.forEach((p, i) => {
+                    const pos = new kakao.maps.LatLng(p.y, p.x);
+                    const img = new kakao.maps.MarkerImage(
+                        'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/markerStar.png',
+                        new kakao.maps.Size(24, 35)
+                    );
+                    const m = new kakao.maps.Marker({ position: pos, image: img });
+                    m.setMap(map);
+                    nearMarkers.push(m);
+
+                    p.isCategory = true;
+
+                    kakao.maps.event.addListener(m, 'click', () => {
+                        info.setContent(`
+                            <div style="padding:8px 10px; min-width:180px">
+                              <div style="font-weight:600">[카테고리] ${p.place_name}</div>
+                              <div style="font-size:12px; color:#666">${p.road_address_name || p.address_name || ''}</div>
+                              <a href="${p.place_url}" target="_blank" style="font-size:12px">카카오 상세보기</a>
+                            </div>
+                        `);
+                        info.open(map, m);
+                    });
+
+                    $nearList.appendChild(createCard(p, i, 'near'));
+                });
+            }, opt);
+        }
+
+        // --- 이벤트 바인딩 ---
+        displayDbMarkers();
+        document.getElementById('btnSeoul').onclick = () => map.panTo(new kakao.maps.LatLng(37.5665,126.9780));
+        document.getElementById('btnBusan').onclick = () => map.panTo(new kakao.maps.LatLng(35.1796,129.0756));
+        document.getElementById('btnJeju').onclick = () => map.panTo(new kakao.maps.LatLng(33.4996,126.5312));
+        $btnSearch.onclick = searchKeyword;
+        $btnNearby.onclick = searchNearby;
+        $kw.addEventListener('keydown', e => { if(e.key === 'Enter') searchKeyword(); });
+    });
+</script>
 </body>
 </html>

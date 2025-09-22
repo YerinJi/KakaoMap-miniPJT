@@ -1,10 +1,11 @@
 package com.multi.kakaomapminipjt.service;
 
 import com.multi.kakaomapminipjt.Pagination;
+import com.multi.kakaomapminipjt.dto.ImageItem;
 import com.multi.kakaomapminipjt.dto.PaginatedResponse;
+import com.multi.kakaomapminipjt.dto.RelatedItem;
 import com.multi.kakaomapminipjt.dto.YukTravel;
 import com.multi.kakaomapminipjt.mapper.YukMapper;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -13,10 +14,12 @@ import java.util.List;
 public class YukServiceImpl implements YukService {
 
     private final YukMapper yukMapper;
-    private final int blockSize = 10; // 페이지 블록 크기
+    private final TourApiService tourApiService;
 
-    public YukServiceImpl(YukMapper yukMapper) {
+    // TourApiService를 생성자를 통해 주입받습니다.
+    public YukServiceImpl(YukMapper yukMapper, TourApiService tourApiService) {
         this.yukMapper = yukMapper;
+        this.tourApiService = tourApiService;
     }
 
     @Override
@@ -44,5 +47,17 @@ public class YukServiceImpl implements YukService {
         List<YukTravel> items = yukMapper.searchTravelList(searchKeyword, offset, size);
 
         return new PaginatedResponse(items, pagination);
+    }
+
+    // Open API 호출 메서드 구현 (TourApiService 위임)
+    @Override
+    public List<ImageItem> getTravelImages(String contentId) {
+        return tourApiService.getImages(contentId);
+    }
+
+    // Open API 호출 메서드 구현 (TourApiService 위임)
+    @Override
+    public List<RelatedItem> getRelatedTravels(String contentId) {
+        return tourApiService.getRelatedTravels(contentId);
     }
 }

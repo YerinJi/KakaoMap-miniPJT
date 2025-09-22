@@ -10,4 +10,5 @@ public class YukTravel {
     private String description;
     private String address;
     private String phone;
+    private String contentId;
 }
