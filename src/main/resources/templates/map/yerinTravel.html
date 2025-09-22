@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Travel Map</title>
+    <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=173e8e02cf7b67e1765534bd4da1a2ce&autoload=false&libraries=services,clusterer"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+        header { padding: 14px 18px; border-bottom: 1px solid #eee; display:flex; gap:12px; align-items:center; }
+        header h1 { font-size: 18px; margin: 0 8px 0 0; color: black; }
+        header .hint { color:#666; font-size: 13px; }
+        .container { display: grid; grid-template-columns: 380px 1fr; height: calc(100vh - 60px); }
+        .left { border-right: 1px solid #eee; padding: 12px; overflow: auto; }
+        .left h2 { margin: 6px 0 10px; font-size: 16px; }
+        .search-row { display:flex; gap:8px; }
+        input[type="text"] { flex: 1; padding: 10px 12px; border:1px solid #ddd; border-radius:10px; }
+        button { padding: 10px 14px; border:1px solid #ddd; background:#fafafa; border-radius:10px; cursor:pointer; }
+        button.primary { background:white; border-color:#222; }
+        .results { margin-top: 12px; display: grid; gap:8px; }
+        .card { border:1px solid #eee; border-radius:12px; padding:10px; }
+        .card h3 { margin: 0 0 6px; font-size: 15px; }
+        .card p { margin: 2px 0; color:#555; font-size: 13px; }
+        .pagination { display:flex; gap:6px; margin-top:8px; flex-wrap: wrap; }
+        .pagination button { padding:6px 10px; border-radius: 8px; }
+        .pill { display:inline-block; border:1px solid #eee; padding:4px 8px; border-radius:999px; font-size:12px; color:#666; }
+        .map { position: relative; }
+        #map { width: 100%; height: 100%; min-height: 420px; }
+        .floating { position:absolute; top:10px; right:10px; background:white; border:1px solid #eee; border-radius:12px; padding:10px; display:flex; gap:8px; }
+        .legend { position:absolute; bottom:10px; left:10px; background:white; border:1px solid #eee; border-radius:12px; padding:8px 10px; color:#555; font-size: 12px; }
+        .muted { color:#777; font-size:12px; }
+        .hr { height:1px; background:#f1f1f1; margin:8px 0; }
+        .small { font-size: 12px; }
+        .footer { padding:8px 12px; border-top:1px solid #eee; color:#666; font-size: 12px; }
+
+        /* 탭 관련 스타일 추가 */
+        .tabs { display:flex; justify-content: space-around; border-bottom: 1px solid #ddd; margin-top: 12px; }
+        .tabs button { flex:1; border:none; background:none; cursor:pointer; padding: 10px 0; font-size:14px; color:#888; font-weight:500; border-bottom:2px solid transparent; transition: border-bottom 0.2s, color 0.2s; }
+        .tabs button.active { color:#333; border-bottom:2px solid #555; font-weight:600; }
+        #tabContent { padding-top: 12px; }
+        .container {
+            display: grid;
+            grid-template-columns: 380px 1fr 280px; /* 세 번째 열(이미지) 추가 */
+            height: calc(100vh - 60px);
+        }
+        .right {
+            border-left: 1px solid #eee;
+            padding: 12px;
+            overflow-y: auto;
+        }
+        .right h2 {
+            margin: 6px 0 10px;
+            font-size: 16px;
+        }
+        .image-grid {
+            display: grid;
+            gap: 10px;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        }
+        .image-grid img {
+            width: 100%;
+            height: auto;
+            border-radius: 8px;
+            border: 1px solid #eee;
+            object-fit: cover;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .no-images {
+            display: none; /* JS로 제어 */
+            text-align: center;
+            color: #888;
+            font-size: 14px;
+        }
+        a{
+            text-decoration: none;
+            color: black;
+        }
+    </style>
+</head>
+<body>
+<header>
+    <h1><a href="/" class="btn-main">Main</a></h1>
+    <h1>Travel Map</h1>
+</header>
+<div class="container">
+    <aside class="left">
+        <h2>100대 관광지 검색</h2>
+        <div class="search-row">
+            <input id="keyword" type="text" placeholder="예) 경복궁, 제주도 카페, 수원 화성" th:value="${keyword}" />
+            <button class="primary" id="searchBtn">검색</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="nearbyBtn">주변 관광지 찾기</button>
+            <span class="pill" id="centerCoords"></span>
+        </div>
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="results">100대 관광지 결과</button>
+            <button class="tab-btn" data-tab="nearby">주변 관광지</button>
+        </div>
+
+
+        <!-- 서버에서 렌더링된 검색 결과(초기 로드) -->
+        <div id="tabContent">
+            <div class="results" id="results">
+                <!-- 서버가 items를 전달하면 Thymeleaf로 초기 렌더링 -->
+                <div th:if="${items != null}">
+                    <div th:each="p, iterStat : ${items}" class="card">
+                        <h3 th:text="${iterStat.index + 1 + ((pagination != null) ? (pagination.page -1) * pagination.size : 0)} + '. ' + ${p.title}"></h3>
+                        <p th:text="${p.address}"></p>
+                        <p class="small muted">전화: <span th:text="${p.phone}">-</span></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="results" id="nearby" style="display:none"></div>
+        </div>
+        <div class="pagination" id="pagination">
+        </div>
+    </aside>
+    <main class="map">
+        <div id="map"></div>
+    </main>
+    <aside class="right">
+        <h2>관련 이미지</h2>
+        <div id="imageResults" class="image-grid">
+            <div class="card no-images" style="display:none">
+                <p>표시할 이미지가 없습니다.</p>
+            </div>
+        </div>
+    </aside>
+</div>
+<script th:inline="javascript">
+    const initialItems = null;
+    const initialPagination = null;
+
+    kakao.maps.load(function() {
+        const mapContainer = document.getElementById('map');
+        const mapOption = { center: new kakao.maps.LatLng(37.8814, 127.7299), level: 6 };
+        const map = new kakao.maps.Map(mapContainer, mapOption);
+        const clusterer = new kakao.maps.MarkerClusterer({ map: map, averageCenter: true, minLevel: 7 });
+        const places = new kakao.maps.services.Places();
+        const infowindow = new kakao.maps.InfoWindow({ zIndex: 1 });
+        const $results = document.getElementById('results');
+        const $nearby = document.getElementById('nearby');
+        const $centerCoords = document.getElementById('centerCoords');
+        const $pagination = document.getElementById('pagination');
+        const $keyword = document.getElementById('keyword');
+        const $searchBtn = document.getElementById('searchBtn');
+        const $nearbyBtn = document.getElementById('nearbyBtn');
+        const $tabButtons = document.querySelectorAll('.tab-btn');
+        const geocoder = new kakao.maps.services.Geocoder();
+        const $imageResults = document.getElementById('imageResults');
+
+        let searchMarkers = [];
+        let nearbyMarkers = [];
+
+        function setCenterLabel() {
+            const c = map.getCenter();
+            $centerCoords.textContent = `center: ${c.getLat().toFixed(5)}, ${c.getLng().toFixed(5)}`;
+        }
+        setCenterLabel();
+        kakao.maps.event.addListener(map, 'center_changed', setCenterLabel);
+
+
+        function searchImages(query) {
+            $imageResults.innerHTML = ''; // 이전 이미지 제거
+
+            fetch(`/yerinTravel/searchImages?keyword=${encodeURIComponent(query)}`)
+                .then(response => {
+                    if (!response.ok) throw new Error('이미지 서버 응답 오류 ' + response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    if (data && data.length > 0) {
+                        data.forEach(url => {
+                            const img = document.createElement('img');
+                            // 이 부분이 http://를 https://로 교체하여 혼합 콘텐츠 문제를 해결합니다.
+                            const secureUrl = url.replace('http://', 'https://');
+                            img.src = secureUrl;
+                            img.alt = query + ' 이미지';
+                            $imageResults.appendChild(img);
+                        });
+                    } else {
+                        const noImagesCard = document.createElement('div');
+                        noImagesCard.className = 'card no-images';
+                        noImagesCard.innerHTML = `<p>이미지를 찾을 수 없습니다.</p>`;
+                        noImagesCard.style.display = 'block';
+                        $imageResults.appendChild(noImagesCard);
+                    }
+                })
+                .catch(error => {
+                    console.error('이미지 검색 실패:', error);
+                    const noImagesCard = document.createElement('div');
+                    noImagesCard.className = 'card no-images';
+                    noImagesCard.innerHTML = `<p>이미지를 불러올 수 없습니다.</p>`;
+                    noImagesCard.style.display = 'block';
+                    $imageResults.appendChild(noImagesCard);
+                });
+        }
+
+        function clearAll() {
+            try { clusterer.clear(); } catch (e) { console.warn('clusterer.clear 오류:', e); }
+            searchMarkers.forEach(m => m.setMap(null));
+            nearbyMarkers.forEach(m => m.setMap(null));
+            searchMarkers = [];
+            nearbyMarkers = [];
+            $results.innerHTML = '';
+            $nearby.innerHTML = '';
+            $pagination.innerHTML = '';
+            infowindow.close();
+        }
+
+        function clearNearbyOnly() {
+            try {
+                try { clusterer.clear(); } catch (e) {}
+                if (searchMarkers.length) clusterer.addMarkers(searchMarkers);
+            } catch (e) { console.warn('clearNearbyOnly clusterer 처리 중 오류:', e); }
+            nearbyMarkers.forEach(m => m.setMap(null));
+            nearbyMarkers = [];
+            $nearby.innerHTML = '';
+        }
+
+        function renderDBList($el, items) {
+            $el.innerHTML = '';
+            items.forEach((p, idx) => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.setAttribute('data-title', p.title || p.place_name || '');
+                card.innerHTML = `
+                    <h3>${idx + 1 + ((initialPagination) ? (initialPagination.page -1) * initialPagination.size : 0)}. ${p.title || p.place_name || ''}</h3>
+                    <p>${p.address || p.road_address_name || p.address_name || ''}</p>
+                    <p class="small muted">전화: ${p.phone || '-'}</p>
+                `;
+                card.onclick = () => {
+                    // 1. 지도 이동 로직 (기존 코드)
+                    if (p.y && p.x) {
+                        const coords = new kakao.maps.LatLng(parseFloat(p.y), parseFloat(p.x));
+                        map.panTo(coords);
+                    } else if (p.address && p.address.trim() !== '') {
+                        geocoder.addressSearch(p.address, function(result, status) {
+                            if (status === kakao.maps.services.Status.OK && result.length > 0) {
+                                const coords = new kakao.maps.LatLng(result[0].y, result[0].x);
+                                map.panTo(coords);
+                            } else {
+                                alert('주소에서 좌표를 찾을 수 없습니다.');
+                                console.error('주소->좌표 실패:', p.address, status);
+                            }
+                        });
+                    } else {
+                        alert('주소 정보가 없습니다.');
+                    }
+
+                    const fullTitle = card.getAttribute('data-title');
+                    if (fullTitle) {
+                        const words = fullTitle.split(' ');
+                        if (words.length > 1) {
+                            const searchKeyword = words.slice(1).join(' ');
+                            searchImages(searchKeyword);
+                        } else {
+                            searchImages(fullTitle);
+                        }
+                    }
+                };
+                $el.appendChild(card);
+            });
+        }
+
+        function renderKakaoList($el, items) {
+            $el.innerHTML = '';
+            items.forEach((p, idx) => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    <h3>${idx + 1}. ${p.place_name}</h3>
+                    <p>${p.road_address_name || p.address_name || ''}</p>
+                    <p class="small muted">전화: ${p.phone || '-'}</p>
+                `;
+                card.onclick = () => {
+                    const pos = new kakao.maps.LatLng(p.y, p.x);
+                    map.panTo(pos);
+
+                    const searchKeyword = p.place_name;
+                    if (searchKeyword) {
+                        searchImages(searchKeyword);
+                    }
+                };
+                $el.appendChild(card);
+            });
+        }
+
+        function addMarkers(locations, colorEmoji) {
+            const bounds = new kakao.maps.LatLngBounds();
+            const newMarkers = [];
+            const isBlue = colorEmoji === '🔵';
+
+            locations.forEach((p, i) => {
+                const lat = parseFloat(p.y);
+                const lng = parseFloat(p.x);
+                if (Number.isNaN(lat) || Number.isNaN(lng)) return;
+                const pos = new kakao.maps.LatLng(lat, lng);
+                bounds.extend(pos);
+
+                const markerImage = new kakao.maps.MarkerImage(
+                    `https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_number_${isBlue ? 'blue' : 'green'}.png`,
+                    new kakao.maps.Size(36, 37),
+                    { spriteSize: new kakao.maps.Size(36, 691), spriteOrigin: new kakao.maps.Point(0, (i * 46) + 10) }
+                );
+
+                const marker = new kakao.maps.Marker({ position: pos, image: markerImage });
+                newMarkers.push(marker);
+
+                kakao.maps.event.addListener(marker, 'click', function() {
+                    const html = `
+                    <div style="padding:8px 10px">
+                        <div style="font-weight:600;margin-bottom:4px">${p.title || p.place_name || ''}</div>
+                        <div style="font-size:12px;color:#555">${p.address || p.road_address_name || p.address_name || ''}</div>
+                        <div style="font-size:12px;color:#666">전화: ${p.phone || '-'}</div>
+                    </div>`;
+                    infowindow.setContent(html);
+                    infowindow.open(map, marker);
+                });
+            });
+
+            if (newMarkers.length > 0) {
+                clusterer.addMarkers(newMarkers);
+                try {
+                    if (!bounds.isEmpty()) map.setBounds(bounds);
+                } catch (e) { console.warn('setBounds 오류:', e); }
+            }
+            return newMarkers;
+        }
+
+        function renderPagination(pagination, opts = {}) {
+            $pagination.innerHTML = '';
+            const minShowOnePage = opts.minShowOnePage !== false;
+
+            if (!pagination) {
+                $pagination.style.display = 'none';
+                return;
+            }
+
+            const isKakao = typeof pagination.gotoPage === 'function';
+            let current = 1;
+            let total = 1;
+
+            if (isKakao) {
+                current = Number(pagination.current || pagination.page || 1);
+                total   = Number(pagination.last || pagination.totalPages || 1);
+            } else {
+                current = Number(pagination.page) || 1;
+                total   = Number(pagination.totalPages || pagination.total || 1);
+            }
+
+            if (!minShowOnePage && total <= 1) {
+                $pagination.style.display = 'none';
+                return;
+            }
+
+            $pagination.style.display = 'flex';
+            $pagination.style.alignItems = 'center';
+            $pagination.style.gap = '6px';
+
+            function gotoPage(pageNum) {
+                if (pageNum < 1) pageNum = 1;
+                if (pageNum > total) pageNum = total;
+
+                if (isKakao) {
+                    pagination.gotoPage(pageNum);
+                } else {
+                    if (typeof opts.onServerGoto === 'function') {
+                        opts.onServerGoto(pageNum);
+                    } else {
+                        searchKeyword(pageNum);
+                    }
+                }
+            }
+
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '‹';
+            prevBtn.disabled = current <= 1;
+            prevBtn.addEventListener('click', () => gotoPage(current - 1));
+            $pagination.appendChild(prevBtn);
+
+            const maxButtons = 7;
+            const half = Math.floor(maxButtons / 2);
+            let start = Math.max(1, current - half);
+            let end = Math.min(total, current + half);
+
+            if (end - start + 1 < maxButtons) {
+                if (start === 1) end = Math.min(total, start + maxButtons - 1);
+                else if (end === total) start = Math.max(1, end - maxButtons + 1);
+            }
+
+            if (start > 1) {
+                const b1 = document.createElement('button');
+                b1.textContent = '1';
+                b1.addEventListener('click', () => gotoPage(1));
+                $pagination.appendChild(b1);
+                if (start > 2) {
+                    const dots = document.createElement('span');
+                    dots.textContent = '...';
+                    dots.className = 'small muted';
+                    $pagination.appendChild(dots);
+                }
+            }
+
+            for (let i = start; i <= end; i++) {
+                const btn = document.createElement('button');
+                btn.textContent = i;
+                if (i === current) {
+                    btn.disabled = true;
+                    btn.style.fontWeight = '600';
+                }
+                btn.addEventListener('click', (() => {
+                    const p = i;
+                    return () => gotoPage(p);
+                })());
+                $pagination.appendChild(btn);
+            }
+
+            if (end < total) {
+                if (end < total - 1) {
+                    const dots = document.createElement('span');
+                    dots.textContent = '...';
+                    dots.className = 'small muted';
+                    $pagination.appendChild(dots);
+                }
+                const last = document.createElement('button');
+                last.textContent = total;
+                last.addEventListener('click', () => gotoPage(total));
+                $pagination.appendChild(last);
+            }
+
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = '›';
+            nextBtn.disabled = current >= total;
+            nextBtn.addEventListener('click', () => gotoPage(current + 1));
+            $pagination.appendChild(nextBtn);
+        }
+
+        function searchKeyword(page = 1, size = 10) {
+            clearAll();
+            const kw = $keyword.value.trim();
+            if (!kw) {
+                alert('검색어를 입력하세요');
+                return;
+            }
+
+            fetch(`/yerinTravel/search?keyword=${encodeURIComponent(kw)}&page=${page}&size=${size}`)
+                .then(response => {
+                    if (!response.ok) throw new Error('서버 응답 오류 ' + response.status);
+                    return response.json();
+                })
+                .then(res => {
+                    const { items, pagination } = res || {};
+                    if (Array.isArray(items) && items.length > 0) {
+                        activateTab('results');
+                        const geocodingPromises = items.map(p => {
+                            return new Promise(resolve => {
+                                if (!p.address || p.address.trim() === '') {
+                                    if (p.y && p.x) resolve({ ...p, y: p.y, x: p.x });
+                                    else resolve(null);
+                                    return;
+                                }
+                                geocoder.addressSearch(p.address, function(result, status) {
+                                    if (status === kakao.maps.services.Status.OK && result.length > 0) {
+                                        resolve({ ...p, y: result[0].y, x: result[0].x });
+                                    } else {
+                                        console.warn('geocode 실패:', p.address, status);
+                                        resolve(null);
+                                    }
+                                });
+                            });
+                        });
+
+                        Promise.all(geocodingPromises)
+                            .then(geocodedData => {
+                                const validData = geocodedData.filter(d => d !== null);
+                                if (validData.length > 0) {
+                                    searchMarkers = addMarkers(validData, '🔵');
+                                    renderDBList($results, validData);
+                                    map.panTo(new kakao.maps.LatLng(validData[0].y, validData[0].x));
+                                } else {
+                                    showNoDbResultsMessage(kw);
+                                }
+                            })
+                            .catch(err => {
+                                console.error('geocoding 중 오류:', err);
+                                showNoDbResultsMessage(kw);
+                            });
+
+                        renderPagination(pagination, { onServerGoto: (pageNum) => searchKeyword(pageNum) });
+                        return;
+                    }
+                    showNoDbResultsMessage(kw);
+                })
+                .catch(error => {
+                    console.error('서버 검색 실패:', error);
+                    showNoDbResultsMessage(kw);
+                });
+        }
+
+        function showNoDbResultsMessage(kw) {
+            activateTab('results');
+            $results.innerHTML = '';
+            const msgCard = document.createElement('div');
+            msgCard.className = 'card';
+            msgCard.innerHTML = `<h3>100대 관광지에 포함되는 곳이 없습니다</h3>`;
+            $results.appendChild(msgCard);
+            $pagination.innerHTML = '';
+            if (kw && kw.trim() !== '') {
+                geocoder.addressSearch(kw, function(result, status) {
+                    if (status === kakao.maps.services.Status.OK && result.length > 0) {
+                        const coords = new kakao.maps.LatLng(result[0].y, result[0].x);
+                        map.panTo(coords);
+                    } else {
+                        console.warn('주소->좌표 변환 실패:', kw, status);
+                    }
+                });
+            }
+        }
+
+        function searchNearbyAttractions() {
+            clearNearbyOnly();
+            const center = map.getCenter();
+            places.categorySearch('AT4', function(data, status, kakaoPagination) {
+                if (status !== kakao.maps.services.Status.OK) {
+                    console.warn('주변 관광지 검색 실패:', status);
+                    alert('주변 관광명소를 불러오지 못했습니다.');
+                    return;
+                }
+                renderKakaoList($nearby, data);
+                const markers = [];
+                const bounds = new kakao.maps.LatLngBounds();
+                data.forEach(p => {
+                    const pos = new kakao.maps.LatLng(p.y, p.x);
+                    bounds.extend(pos);
+                    const marker = new kakao.maps.Marker({
+                        position: pos,
+                        image: new kakao.maps.MarkerImage('https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/markerStar.png', new kakao.maps.Size(24, 35))
+                    });
+                    markers.push(marker);
+                    kakao.maps.event.addListener(marker, 'click', function() {
+                        const html = `<div style="padding:8px 10px"><div style="font-weight:600;margin-bottom:4px">[관광명소] ${p.place_name}</div>
+                                        <div style="font-size:12px;color:#555">${p.road_address_name || p.address_name || ''}</div>
+                                        <a href="${p.place_url}" target="_blank" style="font-size:12px">상세보기</a></div>`;
+                        infowindow.setContent(html);
+                        infowindow.open(map, marker);
+                    });
+                });
+                nearbyMarkers = markers;
+                const nearbyTabBtn = document.querySelector('.tab-btn[data-tab="nearby"]');
+                const isNearbyActive = nearbyTabBtn && nearbyTabBtn.classList.contains('active');
+                if (isNearbyActive) {
+                    try { clusterer.clear(); } catch (e) {}
+                    if (nearbyMarkers.length) clusterer.addMarkers(nearbyMarkers);
+                    try { if (!bounds.isEmpty()) map.setBounds(bounds); } catch (e) { console.warn('bounds 설정 실패:', e); }
+                }
+                renderPagination(kakaoPagination);
+            }, { location: center, radius: 5000 });
+        }
+
+        function activateTab(tabName) {
+            $tabButtons.forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.getAttribute('data-tab') === tabName) {
+                    btn.classList.add('active');
+                }
+            });
+            if (tabName === 'results') {
+                $results.style.display = 'grid';
+                $nearby.style.display = 'none';
+                try { clusterer.clear(); } catch (e) {}
+                if (searchMarkers.length) clusterer.addMarkers(searchMarkers);
+            } else if (tabName === 'nearby') {
+                $results.style.display = 'none';
+                $nearby.style.display = 'grid';
+                try { clusterer.clear(); } catch (e) {}
+                if (nearbyMarkers.length) clusterer.addMarkers(nearbyMarkers);
+            }
+        }
+
+        function init() {
+            if (initialItems && initialItems.length > 0) {
+                const geocodingPromises = initialItems.map(p => {
+                    return new Promise(resolve => {
+                        if (!p.address || p.address.trim() === '') {
+                            if (p.y && p.x) resolve({ ...p, y: p.y, x: p.x });
+                            else resolve(null);
+                            return;
+                        }
+                        geocoder.addressSearch(p.address, function(result, status) {
+                            if (status === kakao.maps.services.Status.OK && result.length > 0) {
+                                resolve({ ...p, y: result[0].y, x: result[0].x });
+                            } else {
+                                console.warn('초기 로드 geocode 실패:', p.address, status);
+                                resolve(null);
+                            }
+                        });
+                    });
+                });
+
+                Promise.all(geocodingPromises)
+                    .then(geocodedData => {
+                        const validData = geocodedData.filter(d => d !== null);
+                        if (validData.length > 0) {
+                            searchMarkers = addMarkers(validData, '🔵');
+                            renderDBList($results, validData);
+                            map.panTo(new kakao.maps.LatLng(validData[0].y, validData[0].x));
+                        }
+                    })
+                    .catch(err => {
+                        console.error('초기 로드 geocoding 중 오류:', err);
+                    });
+            } else {
+                activateTab('results');
+                const kw = $keyword.value.trim();
+                if (kw) {
+                    showNoDbResultsMessage(kw);
+                } else {
+                    $results.innerHTML = `<div class="card"><h3>검색어를 입력해 주세요</h3></div>`;
+                }
+            }
+
+            if (initialPagination) {
+                renderPagination(initialPagination, { onServerGoto: (pageNum) => searchKeyword(pageNum) });
+            }
+        }
+
+        $searchBtn.addEventListener('click', () => searchKeyword());
+        $nearbyBtn.addEventListener('click', () => searchNearbyAttractions());
+        document.getElementById('keyword').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') searchKeyword();
+        });
+        $tabButtons.forEach(btn => btn.addEventListener('click', () => {
+            const tabName = btn.getAttribute('data-tab');
+            if (tabName === 'nearby') {
+                activateTab('nearby');
+                if (!nearbyMarkers || nearbyMarkers.length === 0) {
+                    searchNearbyAttractions();
+                }
+            } else {
+                activateTab(tabName);
+            }
+        }));
+
+        init();
+    });
+</script>
