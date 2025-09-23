@@ -535,7 +535,7 @@
                     .then(geocodedData => {
                         const validData = geocodedData.filter(d => d !== null);
                         if (validData.length > 0) {
-                            searchMarkers = addMarkers(validData, '🔵');
+                            searchMarkers = addMarkers(validData, true);
                             renderDBList($results, validData);
                             map.panTo(new kakao.maps.LatLng(validData[0].y, validData[0].x));
                         }
