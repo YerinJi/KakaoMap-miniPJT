@@ -137,7 +137,9 @@
 
         function clearAll() {
             try { clusterer.clear(); } catch (e) { console.warn('clusterer.clear 오류:', e); }
-            searchMarkers.forEach(m => m.setMap(null));
+            if (Array.isArray(searchMarkers)) {
+                searchMarkers.forEach(m => m.setMap(null));
+            }
             nearbyMarkers.forEach(m => m.setMap(null));
             searchMarkers = [];
             nearbyMarkers = [];
@@ -406,7 +408,7 @@
                             .then(geocodedData => {
                                 const validData = geocodedData.filter(d => d !== null);
                                 if (validData.length > 0) {
-                                    searchMarkers = addMarkers(validData, '🔵');
+                                    searchMarkers = addMarkers(validData, true);
                                     renderDBList($results, validData);
                                     map.panTo(new kakao.maps.LatLng(validData[0].y, validData[0].x));
                                 } else {
