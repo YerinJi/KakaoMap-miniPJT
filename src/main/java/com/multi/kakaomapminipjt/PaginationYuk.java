@@ -70,8 +70,4 @@ public class Pagination {
     public int getOffset(){
         return (page - 1) * size;
     }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 5e2e344beee97b169f5c7389ace80429b7047374
