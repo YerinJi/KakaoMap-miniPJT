@@ -3,6 +3,7 @@ package com.multi.kakaomapminipjt.controller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.multi.kakaomapminipjt.dto.PaginatedResponse;
+import com.multi.kakaomapminipjt.dto.PaginatedResponseYR;
 import com.multi.kakaomapminipjt.service.YerinService;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,7 +33,7 @@ public class MapJYRController {
 
     @GetMapping("/yerinTravel/search")
     @ResponseBody
-    public PaginatedResponse searchYerinTravels(@RequestParam String keyword,
+    public PaginatedResponseYR searchYerinTravels(@RequestParam String keyword,
                                                 @RequestParam(defaultValue = "1") int page,
                                                 @RequestParam(defaultValue = "10") int size) {
         return yerinService.searchByKeyword(keyword, page, size);
