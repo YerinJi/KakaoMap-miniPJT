@@ -1,6 +1,5 @@
 package com.multi.kakaomapminipjt.service;
 
-import com.multi.kakaomapminipjt.Pagination;
 import com.multi.kakaomapminipjt.dto.ImageItem;
 import com.multi.kakaomapminipjt.dto.PaginatedResponse;
 import com.multi.kakaomapminipjt.dto.RelatedItem;

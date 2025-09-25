@@ -71,4 +71,3 @@ public class Pagination {
         return (page - 1) * size;
     }
 }
-

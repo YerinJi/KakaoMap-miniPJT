@@ -1,6 +1,5 @@
 package com.multi.kakaomapminipjt.dto;
 
-import com.multi.kakaomapminipjt.Pagination;
 import lombok.Data;
 import java.util.List;
 
