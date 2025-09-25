@@ -2,7 +2,6 @@ package com.multi.kakaomapminipjt.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.multi.kakaomapminipjt.dto.PaginatedResponse;
 import com.multi.kakaomapminipjt.dto.PaginatedResponseYR;
 import com.multi.kakaomapminipjt.service.YerinService;
 import org.springframework.stereotype.Controller;
