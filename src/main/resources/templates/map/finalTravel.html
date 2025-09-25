@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Travel Map</title>
+    <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=173e8e02cf7b67e1765534bd4da1a2ce&libraries=services,clusterer"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+        header { padding: 14px 18px; border-bottom: 1px solid #eee; display:flex; gap:12px; align-items:center; }
+        header h1 { font-size: 18px; margin: 0 8px 0 0; color: black; }
+        header h1 a { color: black; text-decoration: none; }
+        header .hint { color:#666; font-size: 13px; }
+        .container { display: grid; grid-template-columns: 380px 1fr; height: calc(100vh - 60px); }
+        .left { border-right: 1px solid #eee; padding: 12px; overflow: auto; }
+        .left h2 { margin: 6px 0 10px; font-size: 16px; }
+        .search-row { display:flex; gap:8px; }
+        input[type="text"] { flex: 1; padding: 10px 12px; border:1px solid #ddd; border-radius:10px; }
+        button { padding: 10px 14px; border:1px solid #ddd; background:#fafafa; border-radius:10px; cursor:pointer; }
+        button.primary { background:white; border-color:#222; }
+        .results { margin-top: 12px; display: grid; gap:8px; }
+        .card { border:1px solid #eee; border-radius:12px; padding:10px; }
+        .card h3 { margin: 0 0 6px; font-size: 15px; }
+        .card p { margin: 2px 0; color:#555; font-size: 13px; }
+        .pagination button { padding:6px 10px; border-radius: 8px; }
+        .map { position: relative; }
+        #map { flex: 1; }
+        .card {
+            border: 1px solid #eee;
+            border-radius: 12px;
+            padding: 14px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;
+            background-color: #fcfcfc;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            background-color: #fafafa;
+        }
+        .card .result-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        .card .result-address {
+            margin: 2px 0;
+            color: #666;
+            font-size: 13px;
+        }
+
+        /* 수정된 페이징 디자인 */
+        .pager {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        .pager a {
+            padding: 8px 14px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            text-decoration: none;
+            color: #555;
+            transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+        }
+        .pager a:hover {
+            background-color: #f0f0f0;
+            border-color: #ccc;
+        }
+        .pager a.active {
+            background-color: #333;
+            color: #fff;
+            border-color: #333;
+        }
+
+
+    </style>
+</head>
+<body>
+<header>
+    <h1><a href="/" class="btn-main">Main</a></h1>
+    <h1>Travel Map</h1>
+</header>
+<div class="container">
+    <aside class="left">
+        <form th:action="@{/finalTravel/list}" method="get">
+            <h2>100대 관광지 검색</h2>
+            <div class="search-row">
+                <input id="keyword" type="text" name="keyword" class="search-box" placeholder="예) 경복궁, 제주도 카페, 수원 화성" th:value="${keyword}" />
+                <button class="primary" id="searchBtn" type="submit">검색</button>
+            </div>
+        </form>
+
+        <div class="results" id="results">
+            <div th:each="t : ${travels}" class="result-item card"
+                 th:attr="data-title=${t.title}, data-address=${t.address}">
+                <div class="result-title" th:text="${t.title}">제목</div>
+                <div class="result-address" th:text="${t.address}">주소</div>
+            </div>
+        </div>
+
+        <div class="pager" id="pagination" th:if="${pagination != null}">
+            <!-- DB 페이지 버튼 -->
+            <a th:if="${pagination.page > 1}"
+               th:href="@{/finalTravel/list(page=${pagination.page-1}, size=${pagination.size}, keyword=${keyword})}">이전</a>
+
+            <a th:each="p : ${#numbers.sequence(pagination.startPage, pagination.endPage)}"
+               th:href="@{/finalTravel/list(page=${p}, size=${pagination.size}, keyword=${keyword})}"
+               th:text="${p}"
+               th:classappend="${p == pagination.page} ? 'active'"></a>
+
+            <a th:if="${pagination.page < pagination.totalPages}"
+               th:href="@{/finalTravel/list(page=${pagination.page+1}, size=${pagination.size}, keyword=${keyword})}">다음</a>
+
+            <!-- ✅ 카카오 결과 페이지 버튼 (DB totalPages + 1 ~ totalPages + 3) -->
+            <span th:if="${pagination.page == pagination.totalPages}">
+                <a href="#" onclick="renderKakaoPage(1)" id="kakaoPage1">[[${pagination.totalPages + 1}]]</a>
+                <a href="#" onclick="renderKakaoPage(2)" id="kakaoPage2">[[${pagination.totalPages + 2}]]</a>
+                <a href="#" onclick="renderKakaoPage(3)" id="kakaoPage3">[[${pagination.totalPages + 3}]]</a>
+            </span>
+        </div>
+    </aside>
+    <div id="map" class="map"></div>
+</div>
+<script>
+        let map, geocoder, ps;
+        let markers = [];
+        let currentOverlay = null;
+        let kakaoResults = []; // 카카오 전체 검색 결과 저장
+        let currentKeyword = "";
+
+        const blueMarkerImg = new kakao.maps.MarkerImage(
+            "http://t1.daumcdn.net/localimg/localimages/07/2018/pc/img/marker_spot.png",
+            new kakao.maps.Size(24, 35)
+        );
+        const yellowMarkerImg = new kakao.maps.MarkerImage(
+            "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/markerStar.png",
+            new kakao.maps.Size(24, 35)
+        );
+
+        function closeCurrentOverlay() {
+            if (currentOverlay) {
+                currentOverlay.setMap(null);
+                currentOverlay = null;
+            }
+        }
+
+        function clearMarkers() {
+            markers.forEach(m => m.setMap(null));
+            markers = [];
+        }
+
+        function buildOverlayContent(title, address, imageUrl) {
+            const imgTag = imageUrl
+                ? `<img src="${imageUrl.replace('http://', 'https://')}" alt="${title}" style="width:100%;height:150px;object-fit:cover;">`
+                : `<div style="width:100%;height:150px;display:flex;align-items:center;justify-content:center;color:#999;">이미지 없음</div>`;
+
+            return `
+          <div style="border:1px solid #ccc;border-radius:6px;width:260px;overflow:hidden;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.2);">
+            ${imgTag}
+            <div style="font-weight:bold;font-size:15px;padding:8px;background:#bafe96;">${title}</div>
+            <div style="padding:8px;font-size:13px;color:#333;">${address}</div>
+          </div>
+        `;
+        }
+
+        // 서버 API 호출해서 이미지 URL 가져오기
+        async function fetchImage(keyword) {
+            try {
+                const res = await fetch(`/yerinTravel/searchImages?keyword=${encodeURIComponent(keyword)}`);
+                if (!res.ok) return null;
+                const data = await res.json();
+                return (data && data.length > 0) ? data[0].replace('http://', 'https://') : null;
+            } catch (err) {
+                console.error("이미지 검색 실패:", err);
+                return null;
+            }
+        }
+
+        function initMap() {
+            const container = document.getElementById('map');
+            const options = {center: new kakao.maps.LatLng(37.566535, 126.977969), level: 5};
+            map = new kakao.maps.Map(container, options);
+
+            geocoder = new kakao.maps.services.Geocoder();
+            ps = new kakao.maps.services.Places();
+
+            // DB travels 마커 찍기
+            document.querySelectorAll(".result-item").forEach(div => {
+                const title = div.dataset.title;
+                const address = div.dataset.address;
+
+                geocoder.addressSearch(address, function (result, status) {
+                    if (status === kakao.maps.services.Status.OK && result[0]) {
+                        const coords = new kakao.maps.LatLng(result[0].y, result[0].x);
+                        const marker = new kakao.maps.Marker({
+                            map,
+                            position: coords,
+                            image: blueMarkerImg // DB → 파란색
+                        });
+                        markers.push(marker);
+
+                        const overlay = new kakao.maps.CustomOverlay({
+                            content: buildOverlayContent(title, address),
+                            position: coords,
+                            yAnchor: 1
+                        });
+
+                        kakao.maps.event.addListener(marker, 'click', async () => {
+                            closeCurrentOverlay();
+                            const img = await fetchImage(title);
+                            const overlay = new kakao.maps.CustomOverlay({
+                                content: buildOverlayContent(title, address, img),
+                                position: coords,
+                                yAnchor: 1
+                            });
+                            overlay.setMap(map);
+                            currentOverlay = overlay;
+                        });
+
+                        div.onclick = async () => {
+                            map.setCenter(coords);
+                            map.setLevel(4);
+                            closeCurrentOverlay();
+                            const img = await fetchImage(title);
+                            const overlay = new kakao.maps.CustomOverlay({
+                                content: buildOverlayContent(title, address, img),
+                                position: coords,
+                                yAnchor: 1
+                            });
+                            overlay.setMap(map);
+                            currentOverlay = overlay;
+                        };
+                    }
+                });
+            });
+            setTimeout(moveMapToFirstResult, 800);
+            // ✅ keyword 값 보관
+            const keywordInput = document.querySelector("input[name='keyword']");
+            if (keywordInput && keywordInput.value) {
+                currentKeyword = keywordInput.value;
+                loadKakaoResults(currentKeyword);
+            }
+
+        }
+
+        function moveMapToFirstResult() {
+            const firstAddressEl = document.querySelector(".result-address");
+
+            if (firstAddressEl) {
+                // DB 결과가 존재하면 DB 주소로 이동
+                const address = firstAddressEl.textContent.trim();
+                if (address) {
+                    geocoder.addressSearch(address, function (result, status) {
+                        if (status === kakao.maps.services.Status.OK && result[0]) {
+                            const coords = new kakao.maps.LatLng(result[0].y, result[0].x);
+                            map.setCenter(coords);
+                            map.setLevel(4);
+                        }
+                    });
+                    return;
+                }
+            }
+
+            // DB 결과 없으면 카카오 결과로 이동
+            if (kakaoResults.length > 0) {
+                const first = kakaoResults[0];
+                const coords = new kakao.maps.LatLng(first.y, first.x);
+                map.setCenter(coords);
+                map.setLevel(4);
+            }
+        }
+
+        // 카카오 전체 결과 미리 불러오기 (최대 24개: 8개 x 3페이지)
+        function loadKakaoResults(keyword) {
+            kakaoResults = [];
+
+            function fetchPage(p) {
+                ps.keywordSearch(keyword, (data, status, pagination) => {
+                    if (status === kakao.maps.services.Status.OK) {
+                        kakaoResults = kakaoResults.concat(data);
+                        if (p < 3 && !pagination.isEnd) { // 최대 3페이지
+                            fetchPage(p + 1);
+                        }
+                    }
+                }, {page: p, size: 8});
+            }
+
+            fetchPage(1);
+        }
+
+        // 카카오 페이지 렌더링
+        function renderKakaoPage(kakaoPage) {
+            const resultsDiv = document.getElementById("results");
+            resultsDiv.innerHTML = ""; // 초기화
+            clearMarkers();
+
+            const start = (kakaoPage - 1) * 8;
+            const end = start + 8;
+            const slice = kakaoResults.slice(start, end);
+
+            slice.forEach((place, idx) => {
+                const coords = new kakao.maps.LatLng(place.y, place.x);
+                const marker = new kakao.maps.Marker({
+                    map,
+                    position: coords,
+                    image: yellowMarkerImg // 카카오 → 노란색
+                });
+                markers.push(marker);
+
+                const div = document.createElement("div");
+                div.className = "result-item card";
+                div.innerHTML = `
+                <div class="kakao-result-title">${place.place_name}</div>
+                <div class="result-address">${place.address_name}</div>
+            `;
+
+                const overlay = new kakao.maps.CustomOverlay({
+                    content: buildOverlayContent(place.place_name, place.address_name),
+                    position: coords,
+                    yAnchor: 1
+                });
+
+                kakao.maps.event.addListener(marker, 'click', () => {
+                    closeCurrentOverlay();
+                    overlay.setMap(map);
+                    currentOverlay = overlay;
+                });
+
+                div.onclick = () => {
+                    map.setCenter(coords);
+                    map.setLevel(4);
+                    closeCurrentOverlay();
+                    overlay.setMap(map);
+                    currentOverlay = overlay;
+                };
+
+                resultsDiv.appendChild(div);
+            });
+            document.querySelectorAll('#pagination a').forEach(link => {
+                link.classList.remove('active');
+            });
+            document.getElementById(`kakaoPage${kakaoPage}`).classList.add('active');
+            if (slice.length > 0) {
+                map.setCenter(new kakao.maps.LatLng(slice[0].y, slice[0].x));
+                map.setLevel(4);
+            }
+        }
+
+        window.onload = initMap;
+</script>
+</body>
+</html>
