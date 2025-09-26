@@ -3,23 +3,24 @@ package com.multi.kakaomapminipjt;
 public class Pagination {
     private final int page;
     private final int size;
-    private final int allData;
+    private final int total;
     private final int totalPages;
-    private final int firstPage;
-    private final int lastPage;
-    private final int pageNum;
+    private final int block;
+    private final int startPage;
+    private final int endPage;
 
-    public Pagination(int page, int size, int allData, int pageNum) {
+    public Pagination(int page, int size, int total, int block) {
         this.page = Math.max(1, page);
         this.size = Math.max(1, size);
-        this.allData = Math.max(0, allData);
-        this.pageNum = Math.max(1, pageNum);
-        this.totalPages = (int)Math.ceil((float) this.allData / this.size);
-        int currentPageNum = (int) Math.ceil((float) this.page / this.pageNum);
+        this.total = Math.max(0, total);
+        this.block = Math.max(1, block);
 
-        this.firstPage = (currentPageNum - 1) * this.pageNum + 1;
-        int ep = this.firstPage + this.pageNum - 1;
-        this.lastPage = Math.min( ep , Math.max(1, this.totalPages));
+        this.totalPages = (int)Math.ceil((double) this.total / this.size);
+        int currentBlock = (int) Math.ceil((double) this.page / this.block);
+
+        this.startPage = (currentBlock - 1) * this.block + 1;
+        int ep = this.startPage + this.block - 1;
+        this.endPage = Math.min( ep , Math.max(1, this.totalPages));
     }
 
     public int getPage() {
@@ -30,40 +31,40 @@ public class Pagination {
         return size;
     }
 
-    public int getAllData() {
-        return allData;
+    public int getTotal() {
+        return total;
     }
 
     public int getTotalPages() {
         return totalPages;
     }
 
-    public int getPageNum() {
-        return pageNum;
+    public int getBlock() {
+        return block;
     }
 
-    public int getFirstPage() {
-        return firstPage;
+    public int getStartPage() {
+        return startPage;
     }
 
-    public int getLastPage() {
-        return lastPage;
+    public int getEndPage() {
+        return endPage;
     }
 
     public boolean isHasPrev(){
-        return firstPage > 1;
+        return startPage > 1;
     }
 
     public boolean isHasNext(){
-        return lastPage < totalPages;
+        return endPage < totalPages;
     }
 
     public int getPrevPage(){
-        return Math.max(1, firstPage - 1);
+        return Math.max(1, startPage - 1);
     }
 
     public int getNextPage(){
-        return Math.max(1, Math.min(lastPage + 1, totalPages));
+        return Math.max(1, Math.min(endPage + 1, totalPages));
     }
 
     public int getOffset(){
