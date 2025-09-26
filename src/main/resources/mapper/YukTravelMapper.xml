@@ -8,7 +8,7 @@
         </select>
 
         <select id="getTravelList" resultType="com.multi.kakaomapminipjt.dto.YukTravel">
-                SELECT no, district, title, description, address, phone, contentId
+                SELECT *
                 FROM travel
                 ORDER BY no
                         LIMIT #{offset}, #{size}
