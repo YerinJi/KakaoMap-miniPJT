@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>지도 + 검색 입력</title>
+    <!-- Kakao Maps -->
+    <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=173e8e02cf7b67e1765534bd4da1a2ce&autoload=false&libraries=services"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Pretendard, sans-serif; height: 100vh; }
+
+        header {
+            height: 40px; display: flex; align-items: center;
+            padding: 0 16px; border-bottom: 1px solid #ddd;
+        }
+        header a { text-decoration: none; font-weight: bold; color: #333; }
+        header a:hover { color: #007bff; }
+
+        .layout { display: grid; grid-template-columns: 300px 1fr; height: calc(100vh - 40px); }
+
+        .search-pane {
+            border-right: 1px solid #eee; padding: 16px;
+            display: flex; flex-direction: column; gap: 8px;
+            overflow-y: auto;
+        }
+        .search-pane h2 { font-size: 16px; }
+
+        .input-row { display: flex; gap: 6px; }
+        .input-row input[type="text"] {
+            flex: 1; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px;
+        }
+        .input-row button {
+            padding: 6px 10px; border: 1px solid #ccc; background: #fafafa; border-radius: 6px; cursor: pointer;
+        }
+
+        #results { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+        .result-item { border: 1px solid #ddd; border-radius: 6px; background: #fff; overflow: hidden; cursor: pointer; }
+        .result-title { padding: 8px; font-weight: 700; font-size: 15px; background: #dbeeff; }
+        .result-address { padding: 8px; font-size: 13px; background: #ffffff; color: #333; }
+
+        .pager { display:flex; justify-content:center; gap:6px; margin: 10px 0 4px; flex-wrap: wrap; }
+        .pager a { padding: 4px 8px; border:1px solid #ddd; border-radius: 4px; text-decoration: none; color:#333; pointer-events: none; opacity: .6; }
+        .pager a.active { font-weight: bold; color: #d00; border-color:#d00; }
+        .pager a:hover { background:#f5f5f5; }
+
+        .map-pane { position: relative; }
+        #map { width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+<header>
+    <a href="/">Main</a>
+</header>
+
+<div class="layout">
+    <!-- 좌측: 검색 + DB 리스트 + 페이지바 -->
+    <aside class="search-pane">
+        <h2>검색</h2>
+
+        <form id="searchForm" class="input-row">
+            <input id="keyword" name="keyword" type="text" placeholder="예) 경복궁, 제주 카페, 수원 화성" th:value="${keyword}" />
+            <button id="searchBtn" type="submit" disabled>검색</button>
+        </form>
+
+        <!-- 결과 리스트 (JayTravelMapper.xml의 title, address 사용) -->
+        <div id="results">
+            <div th:each="t, iterStat : ${items}" class="result-item"
+                 th:attr="data-title=${t.title}, data-address=${t.address}">
+                <div class="result-title" th:text="${t.title}">제목</div>
+                <div class="result-address" th:text="${t.address}">주소</div>
+            </div>
+
+            <!-- 결과가 없을 때 -->
+            <div th:if="${items == null or #lists.isEmpty(items)}" class="result-item">
+                <div class="result-title">검색 결과가 없습니다</div>
+                <div class="result-address" th:text="${keyword != null ? '(' + keyword + ')' : ''}"></div>
+            </div>
+        </div>
+
+        <!-- 항상 존재하게: JS가 내용 채움 -->
+        <div class="pager"></div>
+    </aside>
+
+    <!-- 우측: 지도 -->
+    <main class="map-pane">
+        <div id="map"></div>
+    </main>
+</div>
+
+<script>
+    /***** 전역 상태 *****/
+    let map, geocoder, ps, currentOverlay = null;
+    let kakaoResults = [];
+    const PAGE_SIZE = 8;
+    const PAGE_GROUP = 3;
+    let currentPage = 1;
+
+    /** DOM 헬퍼 */
+    const $ = (sel) => document.querySelector(sel);
+
+    /** 페이지 준비: 버튼 즉시 활성화 (SDK 로딩과 무관) */
+    (function enableSearchButtonEarly(){
+        const btn = $("#searchBtn");
+        if (btn) btn.disabled = false;
+    })();
+
+    /** SDK 로딩 후 초기화 (지도+Places+지오코더+이벤트 바인딩) */
+    kakao.maps.load(() => {
+        try {
+            // 지도
+            map = new kakao.maps.Map($("#map"), {
+                center: new kakao.maps.LatLng(37.5665, 126.9780),
+                level: 6
+            });
+            // 서비스
+            ps = new kakao.maps.services.Places();
+            geocoder = new kakao.maps.services.Geocoder();
+
+            // 검색 폼
+            const form = $("#searchForm");
+            form?.addEventListener("submit", (e) => {
+                e.preventDefault();
+                const kw = $("#keyword")?.value?.trim();
+                if (!kw) return;
+                currentPage = 1;
+                clearServerRenderedResults();
+                loadKakaoResults(kw);
+            });
+
+            // 검색 탭 외부 클릭/지도 클릭 시 오버레이 닫기
+            kakao.maps.event.addListener(map, "click", closeOverlay);
+            document.addEventListener("click", (e) => {
+                if (!e.target.closest(".search-pane")) closeOverlay();
+            });
+
+            // 결과 클릭 바인딩
+            bindResultClicks();
+        } catch (err) {
+            console.error("Init error:", err);
+        }
+    });
+
+    /** 서버 템플릿 결과 비우기 */
+    function clearServerRenderedResults() {
+        const resultsDiv = $("#results");
+        if (resultsDiv) resultsDiv.innerHTML = "";
+        const pager = document.querySelector(".pager");
+        if (pager) pager.innerHTML = "";
+    }
+
+    /** Kakao Places 결과 로드 (필요시 최대 10페이지까지) */
+    function loadKakaoResults(keyword) {
+        kakaoResults = [];
+        const MAX_FETCH_PAGES = 10;
+
+        function fetchPage(p) {
+            ps.keywordSearch(
+                keyword,
+                (data, status, pagination) => {
+                    if (status === kakao.maps.services.Status.OK) {
+                        kakaoResults = kakaoResults.concat(data);
+                        if (p < MAX_FETCH_PAGES && !pagination.isEnd) {
+                            fetchPage(p + 1);
+                        } else {
+                            renderKakaoPage(1);
+                            renderPagination();
+                        }
+                    } else {
+                        renderEmpty(keyword);
+                    }
+                },
+                { page: p, size: PAGE_SIZE }
+            );
+        }
+
+        fetchPage(1);
+    }
+
+    /** 결과 없음 */
+    function renderEmpty(keyword) {
+        const resultsDiv = $("#results");
+        if (!resultsDiv) return;
+        resultsDiv.innerHTML = `
+      <div class="result-item">
+        <div class="result-title">검색 결과가 없습니다</div>
+        <div class="result-address">${keyword ? "(" + escapeHtml(keyword) + ")" : ""}</div>
+      </div>
+    `;
+        const pager = document.querySelector(".pager");
+        if (pager) pager.innerHTML = "";
+    }
+
+    /** 리스트 렌더 */
+    function renderKakaoPage(page) {
+        const resultsDiv = $("#results");
+        if (!resultsDiv) return;
+
+        resultsDiv.innerHTML = "";
+        const start = (page - 1) * PAGE_SIZE;
+        const end = start + PAGE_SIZE;
+        const slice = kakaoResults.slice(start, end);
+
+        slice.forEach((place) => {
+            const item = document.createElement("div");
+            item.className = "result-item";
+            item.innerHTML = `
+        <div class="result-title">${escapeHtml(place.place_name || "")}</div>
+        <div class="result-address">
+          ${escapeHtml(place.address_name || place.road_address_name || "")}
+        </div>
+      `;
+            // data-*에 좌표 캐시(클릭 시 지오코더 없이 바로 이동)
+            item.dataset.lat = place.y;
+            item.dataset.lng = place.x;
+            item.dataset.title = place.place_name || "";
+            item.dataset.address = place.address_name || place.road_address_name || "";
+            resultsDiv.appendChild(item);
+        });
+    }
+
+    /** .pager 없으면 생성 */
+    function ensurePagerContainer() {
+        let pager = document.querySelector(".pager");
+        if (!pager) {
+            pager = document.createElement("div");
+            pager.className = "pager";
+            pager.style.display = "flex";
+            pager.style.justifyContent = "center";
+            pager.style.gap = "6px";
+            pager.style.margin = "10px 0 4px";
+            pager.style.flexWrap = "wrap";
+            const host = document.querySelector(".search-pane") || document.body;
+            host.appendChild(pager);
+        } else {
+            pager.style.display = "flex";
+        }
+        return pager;
+    }
+
+    /** 페이지네이션 (3개 묶음: 1,2,3 -> 4,5,6) */
+    function renderPagination() {
+        const total = Array.isArray(kakaoResults) ? kakaoResults.length : 0;
+        const totalPages = Math.ceil(total / PAGE_SIZE);
+        const pager = ensurePagerContainer();
+        pager.innerHTML = "";
+
+        if (totalPages <= 1) { pager.style.display = "none"; return; }
+        pager.style.display = "flex";
+
+        if (currentPage < 1) currentPage = 1;
+        if (currentPage > totalPages) currentPage = totalPages;
+
+        const group = Math.ceil(currentPage / PAGE_GROUP);
+        const start = (group - 1) * PAGE_GROUP + 1;
+        const end = Math.min(start + PAGE_GROUP - 1, totalPages);
+
+        const makeBtn = (label, onClick, { active=false, disabled=false } = {}) => {
+            const a = document.createElement("a");
+            a.textContent = label;
+            a.href = "javascript:void(0)";
+            // CSS에 pointer-events:none 이 있어도 클릭되게 강제
+            a.style.setProperty("pointer-events", disabled ? "none" : "auto", "important");
+            a.style.opacity = disabled ? ".6" : "1";
+            a.style.padding = "4px 8px";
+            a.style.border = "1px solid #ddd";
+            a.style.borderRadius = "4px";
+            a.style.textDecoration = "none";
+            if (active) {
+                a.classList.add("active");
+                a.style.fontWeight = "700";
+                a.style.color = "#d00";
+                a.style.borderColor = "#d00";
+            }
+            a.addEventListener("click", (e) => { e.preventDefault(); if (!disabled) onClick(); });
+            return a;
+        };
+
+// ◀ 이전 (한 페이지씩 이동; 새 묶음 필요할 때만 재생성)
+        pager.appendChild(
+            makeBtn('이전', () => {
+                if (currentPage > 1) {
+                    currentPage -= 1;                 // 한 페이지씩 감소
+                    renderKakaoPage(currentPage);
+
+                    // 현재 페이지가 기존 묶음의 시작보다 작아졌는지(=이전 묶음으로 넘어갔는지)
+                    const movedToPrevGroup = currentPage < start;
+                    if (movedToPrevGroup) {
+                        renderPagination();             // 묶음 번호(1,2,3 등)로 재생성
+                    } else {
+                        renderPaginationActive(pager, currentPage); // 같은 묶음이면 active만 갱신
+                    }
+                }
+            }, { disabled: currentPage <= 1 })
+        );
+
+        // 현재 묶음 번호(3개)
+        for (let p = start; p <= end; p++) {
+            pager.appendChild(
+                makeBtn(String(p), () => {
+                    currentPage = p;
+                    renderKakaoPage(currentPage);
+                    renderPaginationActive(pager, currentPage); // 같은 묶음 내에서만 active 갱신
+                }, { active: p === currentPage })
+            );
+        }
+
+        // 다음 묶음
+        pager.appendChild(
+            makeBtn('다음', () => {
+                if (currentPage < totalPages) {
+                    currentPage += 1;                // 한 페이지씩 증가
+                    renderKakaoPage(currentPage);
+
+                    // 현재 페이지가 기존 묶음 범위를 넘었는지 확인
+                    const movedToNextGroup = currentPage > end;
+                    if (movedToNextGroup) {
+                        renderPagination();             // 묶음 번호(4,5,6 등)로 재생성
+                    } else {
+                        renderPaginationActive(pager, currentPage); // 같은 묶음이면 active만 갱신
+                    }
+                }
+            }, { disabled: currentPage >= totalPages })
+        );
+    }
+
+    /** 활성 페이지 스타일 갱신 */
+    function renderPaginationActive(pagerEl, activePage) {
+        [...pagerEl.querySelectorAll("a")].forEach((a) => {
+            const isActive = a.textContent === String(activePage);
+            a.classList.toggle("active", isActive);
+            a.style.fontWeight = isActive ? "700" : "400";
+            a.style.color = isActive ? "#d00" : "#333";
+            a.style.borderColor = isActive ? "#d00" : "#ddd";
+        });
+    }
+
+    /** 결과 아이템 클릭 -> 좌표로 오버레이 표시 */
+    function bindResultClicks() {
+        const results = $("#results");
+        if (!results) return;
+
+        results.addEventListener("click", (e) => {
+            const item = e.target.closest(".result-item");
+            if (!item) return;
+            e.stopPropagation();
+
+            const title = item.dataset.title || item.querySelector(".result-title")?.textContent?.trim() || "";
+            const address = item.dataset.address || item.querySelector(".result-address")?.textContent?.trim() || "";
+
+            const lat = item.dataset.lat, lng = item.dataset.lng;
+            if (lat && lng) {
+                showOverlay(parseFloat(lat), parseFloat(lng), title, address);
+                return;
+            }
+            if (!address) return;
+
+            geocoder.addressSearch(address, (result, status) => {
+                if (status === kakao.maps.services.Status.OK && result[0]) {
+                    const y = parseFloat(result[0].y);
+                    const x = parseFloat(result[0].x);
+                    item.dataset.lat = y;
+                    item.dataset.lng = x;
+                    showOverlay(y, x, title, address);
+                } else {
+                    alert("주소를 좌표로 변환하지 못했습니다: " + address);
+                }
+            });
+        });
+    }
+
+    /** 오버레이 표시 (뾰족 화살표 포함) */
+    function showOverlay(lat, lng, title, address) {
+        closeOverlay();
+        const pos = new kakao.maps.LatLng(lat, lng);
+        map.setCenter(pos);
+        map.setLevel(4);
+
+        const imgSlotId = `ov-img-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+        const content = `
+    <div style="position:relative; overflow:visible; width:260px;">
+      <div style="border:1px solid #ccc; border-radius:8px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.2); overflow:hidden;">
+        <div id="${imgSlotId}" style="height:140px; display:flex; align-items:center; justify-content:center; color:#777; font-size:13px; background:#f7f7f7;">
+          이미지 로딩중...
+        </div>
+        <div style="padding:8px 10px;">
+          <div style="font-weight:700; font-size:14px; margin-bottom:4px;">${escapeHtml(title || "제목")}</div>
+          <div style="font-size:12px; color:#555; line-height:1.4;">${escapeHtml(address || "")}</div>
+        </div>
+      </div>
+      <div style="position:absolute; left:50%; top:100%; transform:translateX(-50%);
+                  width:0; height:0; border-left:12px solid transparent; border-right:12px solid transparent;
+                  border-top:12px solid #ccc; filter: drop-shadow(0 2px 2px rgba(0,0,0,.15));"></div>
+      <div style="position:absolute; left:50%; top:calc(100% + 1px); transform:translateX(-50%);
+                  width:0; height:0; border-left:11px solid transparent; border-right:11px solid transparent;
+                  border-top:11px solid #fff;"></div>
+    </div>
+  `;
+
+        currentOverlay = new kakao.maps.CustomOverlay({
+            position: pos,
+            content: content,
+            xAnchor: 0.5,
+            yAnchor: 1.06
+        });
+        currentOverlay.setMap(map);
+
+        fetchImage(title).then((url) => {
+            const slot = document.getElementById(imgSlotId);
+            if (!slot) return; // 오버레이가 닫혔으면 중단
+            if (url) {
+                slot.innerHTML = `<img src="${url}" alt="${escapeHtml(title || '')}"
+                          style="width:100%; height:140px; object-fit:cover;">`;
+                slot.style.background = '#fff';
+                slot.style.color = '';
+            } else {
+                slot.textContent = '이미지 없음';
+            }
+        }).catch(() => {
+            const slot = document.getElementById(imgSlotId);
+            if (slot) slot.textContent = '이미지 로딩 실패';
+        });
+    }
+
+    function closeOverlay() {
+        if (currentOverlay) {
+            currentOverlay.setMap(null);
+            currentOverlay = null;
+        }
+    }
+
+    /** XSS 안전 텍스트 */
+    function escapeHtml(str) {
+        return String(str)
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#039;");
+    }
+
+    /** 디버깅 보조: 전역 에러 콘솔에 표시 */
+    window.addEventListener("error", (e) => {
+        console.error("JS Error:", e.message, e.filename + ":" + e.lineno);
+    });
+
+    async function fetchImage(keyword) {
+        try {
+            const res = await fetch(`/jayTravel/searchImages?keyword=${encodeURIComponent(keyword)}`);
+            if (!res.ok) return null;
+            const data = await res.json();
+            return (data && data.length > 0) ? data[0].replace('http://', 'https://') : null;
+        } catch (err) {
+            console.error("이미지 검색 실패:", err);
+            return null;
+        }
+    }
+</script>
+
+</body>
+</html>

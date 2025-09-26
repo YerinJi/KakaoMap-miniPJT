@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.multi.kakaomapminipjt.mapper.JayMapper">
+    <!--  검색 쿼리  -->
+    <select id="searchByKeyword" parameterType="map" resultType="com.multi.kakaomapminipjt.dto.Travel">
+        SELECT title, address FROM travel
+        <where>
+            <if test="keyword != null">
+                AND (title LIKE concat('%', #{keyword} , '%')
+                OR address LIKE concat('%', #{keyword} , '%'))
+            </if>
+        </where>
+        ORDER BY no DESC
+        limit #{offset}, #{limit}
+    </select>
+
+    <!--  검색 결과 카운트  -->
+    <select id="countByKeyword" parameterType="string" resultType="int">
+        SELECT count(*) FROM travel
+        <where>
+            <if test="keyword != null and keyword != ''">
+                AND (title LIKE concat('%', #{keyword} , '%')
+                OR address LIKE concat('%', #{keyword} , '%'))
+            </if>
+        </where>
+    </select>
+</mapper>
