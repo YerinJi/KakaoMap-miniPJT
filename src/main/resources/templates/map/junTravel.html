@@ -148,168 +148,198 @@
         markers = [];
     }
 
-    function buildOverlayContent(title, address) {
-        return `
-          <div style="border:1px solid #ccc;border-radius:6px;width:260px;overflow:hidden;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.2);">
+        function buildOverlayContent(title, address, imageUrl) {
+            const imgTag = imageUrl
+                ? `<img src="${imageUrl.replace('http://', 'https://')}" alt="${title}" style="width:100%;height:150px;object-fit:cover;">`
+                : `<div style="width:100%;height:150px;display:flex;align-items:center;justify-content:center;color:#999;">이미지 없음</div>`;
+
+            return `
+          <div style="border:1px solid #ccc;border-radius:6px;width:260px;overflow:hidden;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.2);">
+            ${imgTag}
             <div style="font-weight:bold;font-size:15px;padding:8px;background:#bafe96;">${title}</div>
             <div style="padding:8px;font-size:13px;color:#333;">${address}</div>
           </div>
         `;
-    }
-
-    function initMap() {
-        const container = document.getElementById('map');
-        const options = { center: new kakao.maps.LatLng(37.566535, 126.977969), level: 5 };
-        map = new kakao.maps.Map(container, options);
-
-        geocoder = new kakao.maps.services.Geocoder();
-        ps = new kakao.maps.services.Places();
-
-        // DB travels 마커 찍기
-        document.querySelectorAll(".result-item").forEach(div => {
-            const title = div.dataset.title;
-            const address = div.dataset.address;
-
-            geocoder.addressSearch(address, function(result, status) {
-                if (status === kakao.maps.services.Status.OK && result[0]) {
-                    const coords = new kakao.maps.LatLng(result[0].y, result[0].x);
-                    const marker = new kakao.maps.Marker({
-                        map,
-                        position: coords,
-                        image: blueMarkerImg // DB → 파란색
-                    });
-                    markers.push(marker);
-
-                    const overlay = new kakao.maps.CustomOverlay({
-                        content: buildOverlayContent(title, address),
-                        position: coords,
-                        yAnchor: 1
-                    });
-
-                    kakao.maps.event.addListener(marker, 'click', () => {
-                        closeCurrentOverlay();
-                        overlay.setMap(map);
-                        currentOverlay = overlay;
-                    });
-
-                    div.onclick = () => {
-                        map.setCenter(coords);
-                        map.setLevel(4);
-                        closeCurrentOverlay();
-                        overlay.setMap(map);
-                        currentOverlay = overlay;
-                    };
-                }
-            });
-        });
-        setTimeout(moveMapToFirstResult, 800);
-        // ✅ keyword 값 보관
-        const keywordInput = document.querySelector("input[name='keyword']");
-        if (keywordInput && keywordInput.value) {
-            currentKeyword = keywordInput.value;
-            loadKakaoResults(currentKeyword);
         }
 
-    }
-    function moveMapToFirstResult() {
-        const firstAddressEl = document.querySelector(".result-address");
-
-        if (firstAddressEl) {
-            // DB 결과가 존재하면 DB 주소로 이동
-            const address = firstAddressEl.textContent.trim();
-            if (address) {
-                geocoder.addressSearch(address, function(result, status) {
-                    if (status === kakao.maps.services.Status.OK && result[0]) {
-                        const coords = new kakao.maps.LatLng(result[0].y, result[0].x);
-                        map.setCenter(coords);
-                        map.setLevel(4);
-                    }
-                });
-                return;
+        // 서버 API 호출해서 이미지 URL 가져오기
+        async function fetchImage(keyword) {
+            try {
+                const res = await fetch(`/yerinTravel/searchImages?keyword=${encodeURIComponent(keyword)}`);
+                if (!res.ok) return null;
+                const data = await res.json();
+                return (data && data.length > 0) ? data[0].replace('http://', 'https://') : null;
+            } catch (err) {
+                console.error("이미지 검색 실패:", err);
+                return null;
             }
         }
 
-        // DB 결과 없으면 카카오 결과로 이동
-        if (kakaoResults.length > 0) {
-            const first = kakaoResults[0];
-            const coords = new kakao.maps.LatLng(first.y, first.x);
-            map.setCenter(coords);
-            map.setLevel(4);
-        }
-    }
+        function initMap() {
+            const container = document.getElementById('map');
+            const options = { center: new kakao.maps.LatLng(37.566535, 126.977969), level: 5 };
+            map = new kakao.maps.Map(container, options);
 
-    // 카카오 전체 결과 미리 불러오기 (최대 24개: 8개 x 3페이지)
-    function loadKakaoResults(keyword) {
-        kakaoResults = [];
-        function fetchPage(p) {
-            ps.keywordSearch(keyword, (data, status, pagination) => {
-                if (status === kakao.maps.services.Status.OK) {
-                    kakaoResults = kakaoResults.concat(data);
-                    if (p < 3 && !pagination.isEnd) { // 최대 3페이지
-                        fetchPage(p + 1);
+            geocoder = new kakao.maps.services.Geocoder();
+            ps = new kakao.maps.services.Places();
+
+            // DB travels 마커 찍기
+            document.querySelectorAll(".result-item").forEach(div => {
+                const title = div.dataset.title;
+                const address = div.dataset.address;
+
+                geocoder.addressSearch(address, function(result, status) {
+                    if (status === kakao.maps.services.Status.OK && result[0]) {
+                        const coords = new kakao.maps.LatLng(result[0].y, result[0].x);
+                        const marker = new kakao.maps.Marker({
+                            map,
+                            position: coords,
+                            image: blueMarkerImg // DB → 파란색
+                        });
+                        markers.push(marker);
+
+                        const overlay = new kakao.maps.CustomOverlay({
+                            content: buildOverlayContent(title, address),
+                            position: coords,
+                            yAnchor: 1
+                        });
+
+                            kakao.maps.event.addListener(marker, 'click', async () => {
+                                closeCurrentOverlay();
+                                const img = await fetchImage(title);
+                                const overlay = new kakao.maps.CustomOverlay({
+                                    content: buildOverlayContent(title, address, img),
+                                    position: coords,
+                                    yAnchor: 1
+                                });
+                                overlay.setMap(map);
+                                currentOverlay = overlay;
+                            });
+
+                                div.onclick = async () => {
+                                    map.setCenter(coords);
+                                    map.setLevel(4);
+                                    closeCurrentOverlay();
+                                    const img = await fetchImage(title);
+                                    const overlay = new kakao.maps.CustomOverlay({
+                                        content: buildOverlayContent(title, address, img),
+                                        position: coords,
+                                        yAnchor: 1
+                                    });
+                                    overlay.setMap(map);
+                                    currentOverlay = overlay;
+                                };
+                            }
+                        });
+                    });
+                    setTimeout(moveMapToFirstResult, 800);
+                    // ✅ keyword 값 보관
+                    const keywordInput = document.querySelector("input[name='keyword']");
+                    if (keywordInput && keywordInput.value) {
+                        currentKeyword = keywordInput.value;
+                        loadKakaoResults(currentKeyword);
+                    }
+
+                }
+                function moveMapToFirstResult() {
+                    const firstAddressEl = document.querySelector(".result-address");
+
+                    if (firstAddressEl) {
+                        // DB 결과가 존재하면 DB 주소로 이동
+                        const address = firstAddressEl.textContent.trim();
+                        if (address) {
+                            geocoder.addressSearch(address, function(result, status) {
+                                if (status === kakao.maps.services.Status.OK && result[0]) {
+                                    const coords = new kakao.maps.LatLng(result[0].y, result[0].x);
+                                    map.setCenter(coords);
+                                    map.setLevel(4);
+                                }
+                            });
+                            return;
+                        }
+                    }
+
+                    // DB 결과 없으면 카카오 결과로 이동
+                    if (kakaoResults.length > 0) {
+                        const first = kakaoResults[0];
+                        const coords = new kakao.maps.LatLng(first.y, first.x);
+                        map.setCenter(coords);
+                        map.setLevel(4);
                     }
                 }
-            }, {page: p, size: 8});
-        }
-        fetchPage(1);
-    }
 
-    // 카카오 페이지 렌더링
-    function renderKakaoPage(kakaoPage) {
-        const resultsDiv = document.getElementById("results");
-        resultsDiv.innerHTML = ""; // 초기화
-        clearMarkers();
+                // 카카오 전체 결과 미리 불러오기 (최대 24개: 8개 x 3페이지)
+                function loadKakaoResults(keyword) {
+                    kakaoResults = [];
+                    function fetchPage(p) {
+                        ps.keywordSearch(keyword, (data, status, pagination) => {
+                            if (status === kakao.maps.services.Status.OK) {
+                                kakaoResults = kakaoResults.concat(data);
+                                if (p < 3 && !pagination.isEnd) { // 최대 3페이지
+                                    fetchPage(p + 1);
+                                }
+                            }
+                        }, {page: p, size: 8});
+                    }
+                    fetchPage(1);
+                }
 
-        const start = (kakaoPage - 1) * 8;
-        const end = start + 8;
-        const slice = kakaoResults.slice(start, end);
+                // 카카오 페이지 렌더링
+                function renderKakaoPage(kakaoPage) {
+                    const resultsDiv = document.getElementById("results");
+                    resultsDiv.innerHTML = ""; // 초기화
+                    clearMarkers();
 
-        slice.forEach((place, idx) => {
-            const coords = new kakao.maps.LatLng(place.y, place.x);
-            const marker = new kakao.maps.Marker({
-                map,
-                position: coords,
-                image: yellowMarkerImg // 카카오 → 노란색
-            });
-            markers.push(marker);
+                    const start = (kakaoPage - 1) * 8;
+                    const end = start + 8;
+                    const slice = kakaoResults.slice(start, end);
 
-            const div = document.createElement("div");
-            div.className = "result-item";
-            div.innerHTML = `
+                    slice.forEach((place, idx) => {
+                        const coords = new kakao.maps.LatLng(place.y, place.x);
+                        const marker = new kakao.maps.Marker({
+                            map,
+                            position: coords,
+                            image: yellowMarkerImg // 카카오 → 노란색
+                        });
+                        markers.push(marker);
+
+                        const div = document.createElement("div");
+                        div.className = "result-item";
+                        div.innerHTML = `
                 <div class="kakao-result-title">${place.place_name}</div>
                 <div class="result-address">${place.address_name}</div>
             `;
 
-            const overlay = new kakao.maps.CustomOverlay({
-                content: buildOverlayContent(place.place_name, place.address_name),
-                position: coords,
-                yAnchor: 1
-            });
+                        const overlay = new kakao.maps.CustomOverlay({
+                            content: buildOverlayContent(place.place_name, place.address_name),
+                            position: coords,
+                            yAnchor: 1
+                        });
 
-            kakao.maps.event.addListener(marker, 'click', () => {
-                closeCurrentOverlay();
-                overlay.setMap(map);
-                currentOverlay = overlay;
-            });
+                        kakao.maps.event.addListener(marker, 'click', () => {
+                            closeCurrentOverlay();
+                            overlay.setMap(map);
+                            currentOverlay = overlay;
+                        });
 
-            div.onclick = () => {
-                map.setCenter(coords);
-                map.setLevel(4);
-                closeCurrentOverlay();
-                overlay.setMap(map);
-                currentOverlay = overlay;
-            };
+                        div.onclick = () => {
+                            map.setCenter(coords);
+                            map.setLevel(4);
+                            closeCurrentOverlay();
+                            overlay.setMap(map);
+                            currentOverlay = overlay;
+                        };
 
-            resultsDiv.appendChild(div);
-        });
+                        resultsDiv.appendChild(div);
+                    });
 
-        if (slice.length > 0) {
-            map.setCenter(new kakao.maps.LatLng(slice[0].y, slice[0].x));
-            map.setLevel(4);
-        }
-    }
+                    if (slice.length > 0) {
+                        map.setCenter(new kakao.maps.LatLng(slice[0].y, slice[0].x));
+                        map.setLevel(4);
+                    }
+                }
 
-    window.onload = initMap;
+                window.onload = initMap;
 </script>
 </body>
 </html>
